@@ -29,3 +29,10 @@ npm-debug.log*
 /platforms
 /plugins
 /www
+
+# Ruflo runtime artifacts
+/.claude-flow/
+/.claude/checkpoints/
+/.claude/scheduled_tasks.lock
+agentdb.rvf
+agentdb.rvf.lock
