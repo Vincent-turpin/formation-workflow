@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Qlick Boost — Plus d'avis Google, plus de clients fidèles</title>
+  <meta name="description" content="Qlick Boost transforme vos clients en ambassadeurs : une roue de la fortune via QR code qui multiplie vos avis Google, abonnés Instagram et contacts clients.">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    header.nav { position: sticky; top: 0; background: rgba(250,250,255,.85); backdrop-filter: blur(10px); z-index: 10; border-bottom: 1px solid var(--line); }
+    header.nav .container { display: flex; align-items: center; justify-content: space-between; height: 68px; }
+    header.nav nav a { margin-left: 22px; text-decoration: none; color: var(--ink); font-weight: 600; font-size: 15px; }
+    header.nav nav a.btn { color: #fff; }
+    @media (max-width: 760px) { header.nav nav a:not(.btn) { display: none; } }
+    .hero { padding: 80px 0 60px; background: radial-gradient(1000px 500px at 80% -10%, #F5D0FE 0, transparent 60%), radial-gradient(800px 400px at 0% 0%, #DDD6FE 0, transparent 60%); }
+    .hero .container { display: grid; gap: 48px; align-items: center; }
+    @media (min-width: 900px) { .hero .container { grid-template-columns: 1.1fr .9fr; } }
+    .hero h1 { font-size: clamp(36px, 5vw, 58px); font-weight: 900; }
+    .hero h1 em { font-style: normal; background: linear-gradient(135deg, var(--brand), var(--brand-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero p.lead { font-size: 19px; color: var(--muted); max-width: 560px; }
+    .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 18px; }
+    .proof { display: flex; gap: 22px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+    .proof b { color: var(--ink); }
+    .phone { margin: 0 auto; width: 300px; border-radius: 40px; background: #0F0A2E; padding: 14px; box-shadow: 0 40px 80px -30px rgba(76, 29, 149, .6); }
+    .phone .screen { border-radius: 28px; background: linear-gradient(180deg, #fff, #F5F3FF); padding: 24px 18px; text-align: center; }
+    .phone canvas { width: 230px; height: 230px; }
+    section { padding: 80px 0; }
+    section h2 { font-size: clamp(28px, 3.5vw, 40px); text-align: center; font-weight: 800; }
+    section .sub { text-align: center; color: var(--muted); max-width: 640px; margin: 0 auto 48px; font-size: 18px; }
+    .step { text-align: center; }
+    .step .n { width: 52px; height: 52px; border-radius: 16px; display: grid; place-items: center; margin: 0 auto 14px; font-size: 24px; background: #EDE9FE; }
+    .feature h3 { font-size: 19px; }
+    .feature .ico { font-size: 28px; margin-bottom: 10px; }
+    .stats { background: var(--ink); color: #fff; }
+    .stats .big { font-size: 44px; font-weight: 900; background: linear-gradient(135deg, #C4B5FD, #F9A8D4); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .stats .muted { color: #C7D2FE; }
+    .sectors { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+    .sectors span { padding: 10px 18px; border-radius: 999px; background: #fff; border: 1px solid var(--line); font-weight: 600; }
+    .price { position: relative; }
+    .price.best { border: 2px solid var(--brand); box-shadow: 0 20px 50px -25px rgba(109, 40, 217, .5); }
+    .price .amount { font-size: 42px; font-weight: 900; }
+    .price ul { padding-left: 0; list-style: none; }
+    .price li { padding: 6px 0; }
+    .price li::before { content: '✓ '; color: var(--ok); font-weight: 900; }
+    .price .tag { position: absolute; top: -12px; right: 20px; }
+    details { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 16px 20px; margin-bottom: 12px; }
+    summary { font-weight: 700; cursor: pointer; }
+    .cta-final { text-align: center; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; border-radius: 28px; padding: 60px 24px; }
+    .cta-final .btn { background: #fff; color: var(--brand); }
+    footer { padding: 40px 0; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+    footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  </style>
+</head>
+<body>
+<header class="nav">
+  <div class="container">
+    <a class="logo" href="/"><span class="dot">Q</span>Qlick Boost</a>
+    <nav>
+      <a href="#comment">Comment ça marche</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#tarifs">Tarifs</a>
+      <a href="/login">Connexion</a>
+      <a class="btn small" href="/login?signup=1">Essai gratuit</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <div>
+      <span class="badge">Par l'agence Qlick · Automatisation &amp; marketing local</span>
+      <h1>Transformez chaque client en <em>avis 5 étoiles</em></h1>
+      <p class="lead">Un QR code sur vos tables, une roue de la fortune sur leur téléphone. Vos clients laissent un avis Google ou s'abonnent à votre Instagram, tentent leur chance… et reviennent chercher leur cadeau.</p>
+      <div class="ctas">
+        <a class="btn" href="/login?signup=1">Lancer ma roue gratuitement</a>
+        <a class="btn ghost" href="/play/demo">Voir la démo client →</a>
+      </div>
+      <div class="proof">
+        <div>⭐ <b>×4</b> avis Google en moyenne</div>
+        <div>⚡ Installé en <b>10 minutes</b></div>
+        <div>🔓 <b>Sans engagement</b></div>
+      </div>
+    </div>
+    <div>
+      <div class="phone"><div class="screen">
+        <strong>Tentez votre chance !</strong>
+        <p class="muted" style="font-size:13px;margin:6px 0 12px">1 avis = 1 tour de roue</p>
+        <canvas id="heroWheel" width="460" height="460"></canvas>
+        <div style="margin-top:10px"><span class="btn small">Tourner la roue 🎁</span></div>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<section id="comment">
+  <div class="container">
+    <h2>Simple pour vous, ludique pour vos clients</h2>
+    <p class="sub">Aucune application à télécharger. Tout se passe dans le navigateur, en moins de 60 secondes.</p>
+    <div class="grid g4">
+      <div class="step"><div class="n">📱</div><h3>1. Scan</h3><p class="muted">Le client scanne le QR code sur la table, le comptoir ou le ticket de caisse.</p></div>
+      <div class="step"><div class="n">⭐</div><h3>2. Action</h3><p class="muted">Il laisse un avis Google ou suit votre compte Instagram — vous choisissez.</p></div>
+      <div class="step"><div class="n">🎡</div><h3>3. La roue</h3><p class="muted">Il tourne la roue et découvre instantanément son lot, avec un bon cadeau unique.</p></div>
+      <div class="step"><div class="n">🔁</div><h3>4. Retour</h3><p class="muted">Il revient en boutique pour l'utiliser. Vous validez le code en un clic.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="fonctionnalites" style="background:#fff">
+  <div class="container">
+    <h2>Tout ce qu'il faut pour booster votre réputation</h2>
+    <p class="sub">Une plateforme pensée pour les commerces de proximité, les franchises et les agences.</p>
+    <div class="grid g3">
+      <div class="card feature"><div class="ico">🎡</div><h3>Roue 100 % personnalisable</h3><p class="muted">Vos lots, vos couleurs, vos probabilités, vos stocks. Les lots épuisés sortent automatiquement du tirage.</p></div>
+      <div class="card feature"><div class="ico">⭐</div><h3>Avis Google &amp; Instagram</h3><p class="muted">Choisissez l'action demandée avant de jouer : avis Google, abonnement Instagram ou participation libre.</p></div>
+      <div class="card feature"><div class="ico">🤖</div><h3>Réponses aux avis par IA</h3><p class="muted">Collez un avis, choisissez un ton : l'IA rédige une réponse personnalisée et professionnelle en une seconde.</p></div>
+      <div class="card feature"><div class="ico">🎟️</div><h3>Bons cadeaux sécurisés</h3><p class="muted">Code unique, QR code, date de validité, délai avant utilisation et validation anti-fraude en caisse.</p></div>
+      <div class="card feature"><div class="ico">📇</div><h3>Base clients RGPD</h3><p class="muted">Récupérez prénom, email et consentement marketing. Export CSV pour vos campagnes email &amp; SMS.</p></div>
+      <div class="card feature"><div class="ico">📊</div><h3>Statistiques en temps réel</h3><p class="muted">Participations, avis générés, gains distribués, taux de retour en boutique : tout est mesuré.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="stats">
+  <div class="container">
+    <div class="grid g4" style="text-align:center">
+      <div><div class="big">×4</div><div class="muted">avis Google / mois</div></div>
+      <div><div class="big">38%</div><div class="muted">des gagnants reviennent</div></div>
+      <div><div class="big">60 s</div><div class="muted">pour participer</div></div>
+      <div><div class="big">0 €</div><div class="muted">de matériel requis</div></div>
+    </div>
+    <p class="muted" style="text-align:center;font-size:12px;margin-top:24px">Objectifs indicatifs, variables selon l'activité et la visibilité du QR code.</p>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2>Pour tous les commerces de proximité</h2>
+    <p class="sub">Dès qu'il y a du passage, il y a des avis à récolter.</p>
+    <div class="sectors">
+      <span>🍽️ Restaurants</span><span>🍔 Fast-food</span><span>☕ Cafés &amp; bars</span><span>🏨 Hôtels</span><span>💇 Salons de coiffure</span>
+      <span>💅 Instituts de beauté</span><span>🛍️ Boutiques</span><span>🥖 Boulangeries</span><span>🏋️ Salles de sport</span><span>🚗 Garages</span><span>🏢 Franchises</span>
+    </div>
+  </div>
+</section>
+
+<section id="tarifs" style="background:#fff">
+  <div class="container">
+    <h2>Des tarifs simples, sans engagement</h2>
+    <p class="sub">14 jours d'essai gratuit. Résiliable à tout moment.</p>
+    <div class="grid g3">
+      <div class="card price">
+        <h3>Essentiel</h3><div class="amount">29 €<small class="muted" style="font-size:16px">/mois</small></div>
+        <ul><li>1 établissement</li><li>Roue personnalisable</li><li>Avis Google &amp; Instagram</li><li>Bons cadeaux + validation</li><li>Statistiques</li></ul>
+        <a class="btn ghost" href="/login?signup=1" style="width:100%">Commencer</a>
+      </div>
+      <div class="card price best">
+        <span class="badge tag">Le plus choisi</span>
+        <h3>Pro</h3><div class="amount">49 €<small class="muted" style="font-size:16px">/mois</small></div>
+        <ul><li>Tout Essentiel</li><li>Réponses aux avis par IA</li><li>Export contacts &amp; CRM</li><li>Kit QR imprimable</li><li>Support prioritaire</li></ul>
+        <a class="btn" href="/login?signup=1" style="width:100%">Essai gratuit</a>
+      </div>
+      <div class="card price">
+        <h3>Réseau &amp; Agence</h3><div class="amount">Sur devis</div>
+        <ul><li>Multi-établissements</li><li>Marque blanche</li><li>Automatisations sur-mesure (n8n, Make, Zapier)</li><li>Campagnes email / SMS</li><li>Accompagnement dédié Qlick</li></ul>
+        <a class="btn ghost" href="mailto:contact@qlick.fr" style="width:100%">Nous contacter</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container" style="max-width:780px">
+    <h2>Questions fréquentes</h2>
+    <details><summary>Est-ce autorisé par Google ?</summary><p class="muted">Google interdit de conditionner un cadeau à un avis <em>positif</em>. Avec Qlick Boost, tous les participants jouent, quelle que soit la note laissée, et vous pouvez proposer une participation sans avis ou via Instagram. Nous vous conseillons d'afficher le règlement du jeu en boutique.</p></details>
+    <details><summary>Mes clients doivent-ils installer une application ?</summary><p class="muted">Non. Un simple scan du QR code ouvre la roue dans le navigateur du téléphone.</p></details>
+    <details><summary>Comment éviter qu'un client joue plusieurs fois ?</summary><p class="muted">Chaque participation est liée à un email et à l'appareil, avec une période de carence que vous fixez (par exemple 30 jours).</p></details>
+    <details><summary>Comment valider un gain en caisse ?</summary><p class="muted">Depuis votre tableau de bord, onglet « Valider un gain » : saisissez le code du client, vérifiez le lot et confirmez. Un code ne peut être utilisé qu'une fois.</p></details>
+    <details><summary>Puis-je contrôler les probabilités ?</summary><p class="muted">Oui : chaque lot a un poids et un stock. Le tirage est réalisé côté serveur, les probabilités ne sont jamais visibles par le client.</p></details>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="cta-final">
+      <h2 style="color:#fff">Prêt à faire tourner la roue ?</h2>
+      <p style="opacity:.9;font-size:18px">Créez votre roue en 10 minutes et récoltez vos premiers avis dès aujourd'hui.</p>
+      <a class="btn" href="/login?signup=1">Créer mon compte gratuitement</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="container">
+    <div><span class="logo" style="font-size:16px"><span class="dot" style="width:20px;height:20px;font-size:12px">Q</span>Qlick Boost</span> — une solution de l'agence Qlick</div>
+    <div><a href="/login">Espace commerçant</a> · <a href="/play/demo">Démo</a> · <a href="mailto:contact@qlick.fr">Contact</a></div>
+  </div>
+</footer>
+
+<script src="/wheel.js"></script>
+<script>
+  const w = new Wheel(document.getElementById('heroWheel'), [
+    { label: 'Café offert', color: '#7C3AED' }, { label: '-10%', color: '#EC4899' },
+    { label: 'Perdu', color: '#94A3B8' }, { label: 'Dessert', color: '#F59E0B' },
+    { label: 'Boisson', color: '#10B981' }, { label: 'Repas offert', color: '#EF4444' },
+  ]);
+  w.idle();
+</script>
+</body>
+</html>

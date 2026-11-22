@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Espace commerçant — Qlick Boost</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    body { min-height: 100vh; display: grid; place-items: center; background: radial-gradient(800px 400px at 50% 0, #EDE9FE, transparent), var(--bg); }
+    .box { width: min(420px, 92vw); }
+    .tabs { display: flex; gap: 6px; background: #F1F5F9; padding: 4px; border-radius: 999px; margin: 18px 0; }
+    .tabs button { flex: 1; border: 0; padding: 10px; border-radius: 999px; background: transparent; font: inherit; font-weight: 700; cursor: pointer; color: var(--muted); }
+    .tabs button.on { background: #fff; color: var(--ink); box-shadow: 0 2px 6px rgba(0,0,0,.06); }
+  </style>
+</head>
+<body>
+<div class="box">
+  <a class="logo" href="/"><span class="dot">Q</span>Qlick Boost</a>
+  <div class="card" style="margin-top:18px">
+    <div class="tabs"><button id="t-login" class="on">Connexion</button><button id="t-signup">Créer un compte</button></div>
+    <form id="form">
+      <div id="biz" hidden><label for="businessName">Nom de votre établissement</label><input id="businessName" name="businessName" placeholder="Ex. Le Petit Bistrot"></div>
+      <label for="email">Email</label><input id="email" name="email" type="email" required autocomplete="email">
+      <label for="password">Mot de passe</label><input id="password" name="password" type="password" required minlength="8" autocomplete="current-password">
+      <p class="error" id="err"></p>
+      <button class="btn" style="width:100%" id="submit">Se connecter</button>
+    </form>
+    <p class="muted" style="font-size:13px;margin-bottom:0">Compte de démo : <b>demo@qlick.fr</b> / <b>demo1234</b></p>
+  </div>
+</div>
+<script>
+let mode = new URLSearchParams(location.search).get('signup') ? 'signup' : 'login';
+const set = (m) => {
+  mode = m;
+  document.getElementById('t-login').classList.toggle('on', m === 'login');
+  document.getElementById('t-signup').classList.toggle('on', m === 'signup');
+  document.getElementById('biz').hidden = m !== 'signup';
+  document.getElementById('businessName').required = m === 'signup';
+  document.getElementById('submit').textContent = m === 'signup' ? 'Créer mon compte — 14 jours offerts' : 'Se connecter';
+};
+document.getElementById('t-login').onclick = () => set('login');
+document.getElementById('t-signup').onclick = () => set('signup');
+set(mode);
+document.getElementById('form').onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target));
+  const res = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await res.json();
+  if (!res.ok) return (document.getElementById('err').textContent = d.error);
+  location.href = '/dashboard';
+};
+</script>
+</body>
+</html>

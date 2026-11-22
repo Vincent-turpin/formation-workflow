@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tableau de bord — Qlick Boost</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    .layout { display: grid; min-height: 100vh; }
+    @media (min-width: 900px) { .layout { grid-template-columns: 240px 1fr; } }
+    aside { background: var(--ink); color: #fff; padding: 22px 16px; }
+    aside .logo { color: #fff; margin-bottom: 26px; }
+    aside nav button { display: flex; gap: 10px; width: 100%; text-align: left; padding: 11px 14px; border: 0; border-radius: 10px; background: transparent; color: #C7D2FE; font: inherit; font-weight: 600; cursor: pointer; margin-bottom: 4px; }
+    aside nav button.on, aside nav button:hover { background: rgba(255,255,255,.1); color: #fff; }
+    @media (max-width: 899px) { aside nav { display: flex; overflow-x: auto; gap: 4px; } aside nav button { white-space: nowrap; width: auto; } aside .bottom { display: none; } }
+    main { padding: 28px clamp(16px, 3vw, 40px); max-width: 1180px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .tab { display: none; }
+    .tab.on { display: block; }
+    .kpi .v { font-size: 32px; font-weight: 900; }
+    .kpi .l { color: var(--muted); font-size: 14px; }
+    .chart { display: flex; align-items: flex-end; gap: 4px; height: 160px; padding-top: 10px; }
+    .chart div { flex: 1; background: linear-gradient(180deg, var(--brand), var(--brand-2)); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
+    .chart div:hover::after { content: attr(data-t); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 11px; padding: 3px 6px; border-radius: 6px; white-space: nowrap; }
+    .bar { height: 10px; border-radius: 99px; background: #EDE9FE; overflow: hidden; }
+    .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
+    .prize-row { display: grid; grid-template-columns: 44px 1fr 90px 90px 110px 36px; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .prize-row input[type=color] { padding: 2px; height: 42px; }
+    @media (max-width: 700px) { .prize-row { grid-template-columns: 40px 1fr 70px 36px; } .prize-row .opt { display: none; } }
+    .wheel-prev canvas { width: 280px; height: 280px; }
+    .reply { white-space: pre-wrap; background: #F8FAFC; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    .stars button { font-size: 26px; background: none; border: 0; cursor: pointer; padding: 0 2px; filter: grayscale(1); opacity: .4; }
+    .stars button.on { filter: none; opacity: 1; }
+    .redeem-box { max-width: 520px; }
+    .redeem-box input { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: .08em; text-transform: uppercase; text-align: center; }
+    .table-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <a class="logo" href="/"><span class="dot">Q</span>Qlick Boost</a>
+    <nav id="nav">
+      <button data-tab="overview" class="on">📊 Vue d'ensemble</button>
+      <button data-tab="wheel">🎡 Ma roue</button>
+      <button data-tab="settings">⚙️ Paramètres</button>
+      <button data-tab="qr">📱 QR code</button>
+      <button data-tab="redeem">🎟️ Valider un gain</button>
+      <button data-tab="contacts">📇 Clients</button>
+      <button data-tab="ai">🤖 Réponses IA</button>
+    </nav>
+    <div class="bottom" style="margin-top:30px;font-size:13px;color:#A5B4FC">
+      <div id="me"></div>
+      <button class="btn small ghost" id="logout" style="color:#fff;border-color:#4338CA;margin-top:10px">Déconnexion</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="top">
+      <div><h1 id="bizName" style="margin:0">…</h1><span class="badge">Essai gratuit · 14 jours</span></div>
+      <a class="btn ghost small" id="openPlay" target="_blank">Ouvrir ma roue ↗</a>
+    </div>
+
+    <!-- Vue d'ensemble -->
+    <section class="tab on" id="tab-overview">
+      <div class="grid g4" id="kpis"></div>
+      <div class="grid g2" style="margin-top:20px">
+        <div class="card"><h3>Participations · 30 derniers jours</h3><div class="chart" id="chart"></div></div>
+        <div class="card"><h3>Lots distribués</h3><div id="byPrize"></div></div>
+      </div>
+      <div class="card" style="margin-top:20px" id="checklist"></div>
+    </section>
+
+    <!-- Roue -->
+    <section class="tab" id="tab-wheel">
+      <div class="grid" style="grid-template-columns: minmax(0,1fr)">
+        <div class="card">
+          <h3>Segments de la roue</h3>
+          <p class="muted" style="margin-top:0">Le <b>poids</b> définit la probabilité relative. Le <b>stock</b> (vide = illimité) retire le lot du tirage une fois épuisé.</p>
+          <div class="prize-row muted" style="font-size:12px;font-weight:700"><span>Couleur</span><span>Libellé</span><span>Poids</span><span class="opt">Stock</span><span class="opt">Type</span><span></span></div>
+          <div id="prizes"></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+            <button class="btn ghost small" id="addPrize">+ Ajouter un segment</button>
+            <button class="btn small" id="savePrizes">Enregistrer la roue</button>
+          </div>
+          <p class="error" id="prizeErr"></p>
+        </div>
+        <div class="card wheel-prev" style="text-align:center">
+          <h3>Aperçu</h3><canvas id="preview" width="560" height="560"></canvas>
+          <div id="probas" style="text-align:left;margin-top:14px"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Paramètres -->
+    <section class="tab" id="tab-settings">
+      <form class="card" id="settingsForm" style="max-width:720px">
+        <h3>Établissement</h3>
+        <label>Nom affiché</label><input name="name" required>
+        <label>Message d'accueil</label><input name="welcomeText">
+        <label>Couleur principale</label><input name="primaryColor" type="color" style="max-width:120px;height:46px">
+        <h3 style="margin-top:28px">Actions pour jouer</h3>
+        <label class="check"><input type="checkbox" name="act_google"> Avis Google</label>
+        <label>Lien vers votre formulaire d'avis Google</label>
+        <input name="googleReviewUrl" placeholder="https://g.page/r/XXXXXXXX/review">
+        <p class="muted" style="font-size:13px;margin:6px 0 0">Dans Google Business Profile : « Demander des avis » → copiez le lien.</p>
+        <label class="check" style="margin-top:16px"><input type="checkbox" name="act_instagram"> Abonnement Instagram</label>
+        <label>Lien Instagram</label><input name="instagramUrl" placeholder="https://instagram.com/votrecompte">
+        <label class="check" style="margin-top:16px"><input type="checkbox" name="act_none"> Participation sans action (recommandé pour respecter les règles Google)</label>
+        <h3 style="margin-top:28px">Règles du jeu</h3>
+        <div class="grid g3">
+          <div><label>Délai entre 2 participations (jours)</label><input name="cooldownDays" type="number" min="0"></div>
+          <div><label>Validité du bon (jours)</label><input name="couponValidityDays" type="number" min="1"></div>
+          <div><label>Utilisable après (heures)</label><input name="minDelayHours" type="number" min="0"></div>
+        </div>
+        <p class="muted" style="font-size:13px">« Utilisable après » oblige le client à revenir lors d'une prochaine visite (ex. 24 h).</p>
+        <label class="check"><input type="checkbox" name="collectPhone"> Demander le numéro de téléphone (pour campagnes SMS)</label>
+        <p class="error" id="setErr"></p>
+        <button class="btn">Enregistrer</button>
+      </form>
+    </section>
+
+    <!-- QR -->
+    <section class="tab" id="tab-qr">
+      <div class="grid g2">
+        <div class="card" style="text-align:center">
+          <h3>Votre QR code</h3>
+          <img id="qrImg" alt="QR code de la roue" style="width:260px;height:260px">
+          <p class="muted" style="word-break:break-all;font-size:13px" id="playUrl"></p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <a class="btn small" id="qrDl" download="qlick-qrcode.png">Télécharger le PNG HD</a>
+            <button class="btn ghost small" id="printKit">Imprimer le chevalet</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Où placer votre QR code ?</h3>
+          <ul class="muted">
+            <li>Sur chaque table (chevalet ou sticker)</li>
+            <li>Au comptoir / à côté du terminal de paiement</li>
+            <li>Sur les tickets de caisse et sacs à emporter</li>
+            <li>Dans votre signature email et vos stories Instagram</li>
+          </ul>
+          <p class="muted">💡 Le personnel qui mentionne le jeu à l'encaissement multiplie la participation par 3.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Validation -->
+    <section class="tab" id="tab-redeem">
+      <div class="card redeem-box">
+        <h3>Valider un bon cadeau</h3>
+        <p class="muted">Saisissez le code présenté par le client.</p>
+        <form id="redeemForm"><input name="code" placeholder="QLK-XXXXXX" required autocomplete="off">
+          <button class="btn" style="width:100%;margin-top:12px">Vérifier</button></form>
+        <div id="redeemRes" style="margin-top:16px"></div>
+      </div>
+    </section>
+
+    <!-- Contacts -->
+    <section class="tab" id="tab-contacts">
+      <div class="card">
+        <div class="top" style="margin-bottom:10px"><h3 style="margin:0">Participants</h3><a class="btn small" href="/api/participations.csv">Exporter en CSV</a></div>
+        <input id="search" placeholder="Rechercher un nom, email, code…" style="margin-bottom:12px">
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Action</th><th>Lot</th><th>Code</th><th>Statut</th><th>Opt-in</th></tr></thead><tbody id="rows"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- IA -->
+    <section class="tab" id="tab-ai">
+      <div class="grid g2">
+        <form class="card" id="aiForm">
+          <h3>Répondre à un avis avec l'IA</h3>
+          <label>Auteur</label><input name="author" placeholder="Marie D.">
+          <label>Note</label>
+          <div class="stars" id="stars"></div>
+          <label>Texte de l'avis</label><textarea name="text" rows="5" placeholder="Collez ici l'avis Google…"></textarea>
+          <div class="grid g2">
+            <div><label>Ton</label><select name="tone"><option>chaleureux</option><option>professionnel</option><option>fun</option><option>sobre et concis</option></select></div>
+            <div><label>Signature</label><input name="signature" placeholder="L'équipe …"></div>
+          </div>
+          <p class="error" id="aiErr"></p>
+          <button class="btn" style="margin-top:8px">✨ Générer la réponse</button>
+        </form>
+        <div class="card">
+          <h3>Réponse proposée</h3>
+          <div id="aiOut" class="muted">La réponse apparaîtra ici.</div>
+          <h3 style="margin-top:28px">Historique</h3>
+          <div id="aiHist"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/wheel.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+const api = async (url, opts = {}) => {
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  if (res.status === 401) { location.href = '/login'; throw new Error('401'); }
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data.error), { data });
+  return data;
+};
+let me, prizes = [];
+
+// navigation
+$('#nav').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#nav button').forEach((x) => x.classList.toggle('on', x === b));
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
+  ({ overview: loadStats, wheel: loadPrizes, contacts: loadContacts, ai: loadReviews, settings: fillSettings })[b.dataset.tab]?.();
+};
+$('#logout').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; };
+
+async function init() {
+  me = await api('/api/me');
+  $('#bizName').textContent = me.business.name;
+  $('#me').textContent = me.email;
+  $('#openPlay').href = me.playUrl;
+  $('#playUrl').textContent = me.playUrl;
+  $('#qrImg').src = $('#qrDl').href = '/api/qrcode.png?size=1200&t=' + Date.now();
+  document.documentElement.style.setProperty('--brand', me.business.primaryColor);
+  loadStats();
+}
+
+// ----- stats -----
+async function loadStats() {
+  const s = await api('/api/stats');
+  const kpi = (v, l) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  const rate = s.winners ? Math.round((s.redeemed / s.winners) * 100) : 0;
+  $('#kpis').innerHTML = kpi(s.totalParticipations, 'Participations') + kpi(s.googleReviews, 'Avis Google générés')
+    + kpi(s.contacts, `Contacts (${s.optins} opt-in)`) + kpi(rate + ' %', `Taux de retour (${s.redeemed}/${s.winners} bons)`);
+  const max = Math.max(1, ...s.series.map((x) => x.count));
+  $('#chart').innerHTML = s.series.map((x) => `<div style="height:${(x.count / max) * 100}%" data-t="${x.date.slice(5)} : ${x.count}"></div>`).join('');
+  const total = Object.values(s.byPrize).reduce((a, b) => a + b, 0) || 1;
+  $('#byPrize').innerHTML = Object.entries(s.byPrize).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+    `<div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-size:14px"><span>${esc(k)}</span><b>${v}</b></div><div class="bar"><i style="width:${(v / total) * 100}%"></i></div></div>`).join('') || '<p class="muted">Aucune participation pour l\'instant.</p>';
+  const b = me.business;
+  const steps = [
+    [!!b.googleReviewUrl || !!b.instagramUrl, 'Renseigner votre lien d\'avis Google ou Instagram', 'settings'],
+    [true, 'Personnaliser les lots de votre roue', 'wheel'],
+    [s.totalParticipations > 0, 'Imprimer et afficher votre QR code', 'qr'],
+    [s.redeemed > 0, 'Valider votre premier bon cadeau en caisse', 'redeem'],
+  ];
+  $('#checklist').innerHTML = '<h3>Bien démarrer</h3>' + steps.map(([ok, t, tab]) =>
+    `<div style="padding:8px 0">${ok ? '✅' : '⬜'} <a href="#" data-go="${tab}">${t}</a></div>`).join('');
+  $('#checklist').onclick = (e) => { const g = e.target.dataset.go; if (g) { e.preventDefault(); document.querySelector(`#nav [data-tab=${g}]`).click(); } };
+}
+
+// ----- roue -----
+let previewWheel;
+async function loadPrizes() { prizes = await api('/api/prizes'); renderPrizes(); }
+function renderPrizes() {
+  $('#prizes').innerHTML = prizes.map((p, i) => `
+    <div class="prize-row" data-i="${i}">
+      <input type="color" data-k="color" value="${p.color}">
+      <input data-k="label" value="${esc(p.label)}" maxlength="40">
+      <input data-k="weight" type="number" min="0" step="0.1" value="${p.weight}">
+      <input class="opt" data-k="stock" type="number" min="0" placeholder="∞" value="${p.stock ?? ''}">
+      <select class="opt" data-k="kind"><option value="win" ${p.kind === 'win' ? 'selected' : ''}>Gagnant</option><option value="lose" ${p.kind === 'lose' ? 'selected' : ''}>Perdant</option></select>
+      <button class="btn small danger" data-del="${i}" title="Supprimer">✕</button>
+    </div>`).join('');
+  updatePreview();
+}
+$('#prizes').oninput = (e) => {
+  const row = e.target.closest('.prize-row'); if (!row) return;
+  const p = prizes[row.dataset.i], k = e.target.dataset.k;
+  p[k] = k === 'weight' ? Number(e.target.value) : k === 'stock' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value;
+  updatePreview();
+};
+$('#prizes').onclick = (e) => { if (e.target.dataset.del !== undefined) { prizes.splice(+e.target.dataset.del, 1); renderPrizes(); } };
+$('#addPrize').onclick = () => { prizes.push({ label: 'Nouveau lot', color: '#3B82F6', weight: 10, stock: null, kind: 'win' }); renderPrizes(); };
+$('#savePrizes').onclick = async () => {
+  $('#prizeErr').textContent = '';
+  try { prizes = await api('/api/prizes', { method: 'PUT', body: prizes }); renderPrizes(); toast('Roue enregistrée ✅'); }
+  catch (e) { $('#prizeErr').textContent = e.message; }
+};
+function updatePreview() {
+  if (!previewWheel) previewWheel = new Wheel($('#preview'), prizes);
+  previewWheel.segments = prizes; previewWheel.draw();
+  const total = prizes.reduce((s, p) => s + (Number(p.weight) || 0), 0) || 1;
+  $('#probas').innerHTML = '<b style="font-size:14px">Probabilités réelles</b>' + prizes.map((p) =>
+    `<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${p.color}"></span> ${esc(p.label)}</span><b>${((p.weight / total) * 100).toFixed(1)} %</b></div>`).join('');
+}
+
+// ----- paramètres -----
+function fillSettings() {
+  const f = $('#settingsForm'), b = me.business;
+  for (const k of ['name', 'welcomeText', 'primaryColor', 'googleReviewUrl', 'instagramUrl', 'cooldownDays', 'couponValidityDays', 'minDelayHours']) f[k].value = b[k] ?? '';
+  f.collectPhone.checked = !!b.collectPhone;
+  f.act_google.checked = b.actions.google; f.act_instagram.checked = b.actions.instagram; f.act_none.checked = b.actions.none;
+}
+$('#settingsForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = {
+    name: f.name.value, welcomeText: f.welcomeText.value, primaryColor: f.primaryColor.value,
+    googleReviewUrl: f.googleReviewUrl.value.trim(), instagramUrl: f.instagramUrl.value.trim(),
+    cooldownDays: f.cooldownDays.value, couponValidityDays: f.couponValidityDays.value, minDelayHours: f.minDelayHours.value,
+    collectPhone: f.collectPhone.checked,
+    actions: { google: f.act_google.checked, instagram: f.act_instagram.checked, none: f.act_none.checked },
+  };
+  if (!body.actions.google && !body.actions.instagram && !body.actions.none) return ($('#setErr').textContent = 'Activez au moins une action.');
+  if (body.actions.google && !body.googleReviewUrl) return ($('#setErr').textContent = 'Renseignez le lien d\'avis Google.');
+  if (body.actions.instagram && !body.instagramUrl) return ($('#setErr').textContent = 'Renseignez le lien Instagram.');
+  $('#setErr').textContent = '';
+  me.business = await api('/api/business', { method: 'PUT', body });
+  $('#bizName').textContent = me.business.name;
+  document.documentElement.style.setProperty('--brand', me.business.primaryColor);
+  toast('Paramètres enregistrés ✅');
+};
+
+// ----- QR imprimable -----
+$('#printKit').onclick = () => {
+  const w = window.open('', '_blank');
+  w.document.write(`<html><head><title>Chevalet ${esc(me.business.name)}</title><style>
+    body{font-family:system-ui;margin:0;display:grid;place-items:center;min-height:100vh}
+    .k{width:105mm;border:2px solid #1E1B4B;border-radius:8mm;padding:10mm;text-align:center}
+    h1{margin:0;font-size:28px;color:${me.business.primaryColor}} p{color:#475569}
+  </style></head><body><div class="k"><h1>🎁 Tentez votre chance !</h1>
+    <p>Scannez, donnez votre avis<br>et faites tourner la roue</p>
+    <img src="/api/qrcode.png?size=800" style="width:70mm;height:70mm">
+    <p><b>${esc(me.business.name)}</b><br><small>100 % gagnant ? Presque ! Règlement disponible en caisse.</small></p>
+  </div><script>setTimeout(()=>print(),600)<\/script></body></html>`);
+  w.document.close();
+};
+
+// ----- validation -----
+$('#redeemForm').onsubmit = (e) => { e.preventDefault(); checkCode(e.target.code.value, false); };
+async function checkCode(code, confirm) {
+  const out = $('#redeemRes');
+  try {
+    const d = await api('/api/redeem', { method: 'POST', body: { code, confirm } });
+    const p = d.participation;
+    if (d.redeemed) { out.innerHTML = `<div class="card" style="border-color:var(--ok)"><h3 class="success">✅ Bon validé</h3><p>${esc(p.prizeLabel)} pour ${esc(p.firstName)}</p></div>`; toast('Gain validé'); return; }
+    out.innerHTML = `<div class="card"><span class="badge ok">Bon valide</span><h2 style="margin:10px 0 4px">${esc(p.prizeLabel)}</h2>
+      <p class="muted">${esc(p.firstName)} · ${esc(p.email)}<br>Gagné le ${new Date(p.createdAt).toLocaleDateString('fr-FR')} · expire le ${new Date(p.expiresAt).toLocaleDateString('fr-FR')}</p>
+      <button class="btn" id="confirmRedeem" style="width:100%">Confirmer l'utilisation</button></div>`;
+    $('#confirmRedeem').onclick = () => checkCode(code, true);
+  } catch (e) {
+    out.innerHTML = `<div class="card" style="border-color:var(--err)"><h3 class="error">❌ ${esc(e.message)}</h3>${e.data?.participation ? `<p class="muted">${esc(e.data.participation.prizeLabel)} · ${esc(e.data.participation.firstName)}</p>` : ''}</div>`;
+  }
+}
+
+// ----- contacts -----
+let contacts = [];
+async function loadContacts() { contacts = await api('/api/participations'); renderContacts(); }
+function renderContacts() {
+  const q = $('#search').value.toLowerCase();
+  const actions = { google: '⭐ Avis Google', instagram: '📸 Instagram', none: '🎁 Direct' };
+  const list = contacts.filter((p) => !q || [p.firstName, p.email, p.code, p.prizeLabel].join(' ').toLowerCase().includes(q));
+  $('#rows').innerHTML = list.map((p) => `<tr>
+    <td>${new Date(p.createdAt).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</td>
+    <td><b>${esc(p.firstName)}</b><br><span class="muted">${esc(p.email)}</span></td>
+    <td>${actions[p.action] || p.action}</td><td>${esc(p.prizeLabel)}</td>
+    <td><code>${p.kind === 'win' ? p.code : '—'}</code></td>
+    <td>${p.kind !== 'win' ? '<span class="badge grey">Perdu</span>' : p.redeemedAt ? '<span class="badge ok">Utilisé</span>' : new Date(p.expiresAt) < new Date() ? '<span class="badge grey">Expiré</span>' : '<span class="badge">En attente</span>'}</td>
+    <td>${p.marketingOptIn ? '✅' : '—'}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">Aucun participant.</td></tr>';
+}
+$('#search').oninput = renderContacts;
+
+// ----- IA -----
+let rating = 5;
+function renderStars() { $('#stars').innerHTML = [1, 2, 3, 4, 5].map((n) => `<button type="button" data-n="${n}" class="${n <= rating ? 'on' : ''}">⭐</button>`).join(''); }
+$('#stars').onclick = (e) => { if (e.target.dataset.n) { rating = +e.target.dataset.n; renderStars(); } };
+renderStars();
+$('#aiForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target, btn = f.querySelector('button.btn');
+  btn.disabled = true; btn.textContent = 'Génération…'; $('#aiErr').textContent = '';
+  try {
+    const r = await api('/api/reviews/reply', { method: 'POST', body: { author: f.author.value, text: f.text.value, tone: f.tone.value, signature: f.signature.value, rating } });
+    $('#aiOut').className = '';
+    $('#aiOut').innerHTML = `<div class="reply">${esc(r.reply)}</div>
+      <div style="margin-top:10px;display:flex;gap:8px;align-items:center"><button class="btn small" id="copyReply">Copier</button>
+      ${r.source === 'modele' ? '<span class="muted" style="font-size:12px">Mode démo (ajoutez ANTHROPIC_API_KEY pour l\'IA)</span>' : '<span class="badge">Généré par IA</span>'}</div>`;
+    $('#copyReply').onclick = () => { navigator.clipboard.writeText(r.reply); toast('Copié !'); };
+    loadReviews();
+  } catch (err) { $('#aiErr').textContent = err.message; }
+  btn.disabled = false; btn.textContent = '✨ Générer la réponse';
+};
+async function loadReviews() {
+  const list = await api('/api/reviews');
+  $('#aiHist').innerHTML = list.slice(0, 8).map((r) => `<details><summary>${'⭐'.repeat(r.rating)} ${esc(r.author || 'Anonyme')}</summary>
+    <p class="muted">${esc(r.text)}</p><div class="reply">${esc(r.reply)}</div></details>`).join('') || '<p class="muted">Aucune réponse générée.</p>';
+}
+
+init();
+</script>
+</body>
+</html>

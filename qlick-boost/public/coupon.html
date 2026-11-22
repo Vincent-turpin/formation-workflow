@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mon bon cadeau</title>
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    main { max-width: 420px; margin: 40px auto; padding: 0 18px; text-align: center; }
+    .ticket { background: #fff; border-radius: 24px; overflow: hidden; box-shadow: 0 30px 60px -30px rgba(30, 27, 75, .4); }
+    .ticket .top { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; padding: 28px 20px; }
+    .ticket .top h1 { font-size: 30px; margin: 8px 0 0; }
+    .ticket .body { padding: 24px; border-top: 3px dashed var(--line); }
+    .code { font-family: ui-monospace, monospace; font-size: 24px; font-weight: 800; letter-spacing: .1em; }
+    .used { position: relative; }
+    .used::after { content: 'UTILISÉ'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 48px; font-weight: 900; color: rgba(220, 38, 38, .75); transform: rotate(-18deg); }
+  </style>
+</head>
+<body>
+<main><div id="root" class="muted">Chargement…</div></main>
+<script>
+(async () => {
+  const code = location.pathname.split('/').pop();
+  const root = document.getElementById('root');
+  const res = await fetch(`/api/public/coupon/${encodeURIComponent(code)}`);
+  if (!res.ok) { root.innerHTML = '<h1>Bon introuvable</h1>'; return; }
+  const d = await res.json();
+  document.documentElement.style.setProperty('--brand', d.primaryColor);
+  const fmt = (s) => new Date(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const expired = new Date(d.expiresAt) < new Date();
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  root.className = '';
+  root.innerHTML = `<div class="ticket ${d.redeemedAt ? 'used' : ''}">
+    <div class="top"><div>${esc(d.business)}</div><h1>${esc(d.label)}</h1><div style="opacity:.85">pour ${esc(d.firstName)}</div></div>
+    <div class="body">
+      <img src="/api/public/coupon/${d.code}/qrcode.png" alt="QR code du bon" width="180" height="180">
+      <div class="code">${d.code}</div>
+      <p class="muted" style="font-size:14px">
+        ${d.redeemedAt ? `Utilisé le ${fmt(d.redeemedAt)}` : expired ? '<b style="color:var(--err)">Bon expiré</b>' : `Valable du ${fmt(d.validFrom)} au ${fmt(d.expiresAt)}`}
+      </p>
+      <p class="muted" style="font-size:13px">Présentez ce bon au personnel. Usage unique, non échangeable, non remboursable.</p>
+    </div></div>`;
+})();
+</script>
+</body>
+</html>
