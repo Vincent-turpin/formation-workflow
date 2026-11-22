@@ -99,3 +99,4 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 details { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 20px; margin-bottom: 12px; }
 summary { font-weight: 600; cursor: pointer; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--deep); color: var(--star); border: 1px solid var(--line); padding: 12px 20px; border-radius: 999px; z-index: 99; font-weight: 600; box-shadow: 0 10px 40px -10px rgba(139, 92, 246, .6); }
+[hidden] { display: none !important; }

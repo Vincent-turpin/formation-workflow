@@ -61,7 +61,7 @@ document.getElementById('form').onsubmit = async (e) => {
   const res = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const d = await res.json();
   if (!res.ok) return (document.getElementById('err').textContent = d.error);
-  location.href = '/dashboard';
+  location.href = d.redirect || '/dashboard';
 };
 </script>
 </body>

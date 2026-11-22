@@ -40,6 +40,8 @@ Les tarifs changent souvent : vérifiez-les sur le site de l'hébergeur avant de
 | Variable | Valeur |
 |---|---|
 | `BASE_URL` | `https://boost.qlick.fr` (l'adresse finale, sans `/` à la fin) |
+| `QLICK_ADMIN_EMAIL` | L'email de l'équipe Qlick qui gère les clients (ex. `contact@qlick.fr`) |
+| `QLICK_ADMIN_PASSWORD` | Un mot de passe solide pour cet accès agence |
 | `ANTHROPIC_API_KEY` | Votre clé Anthropic, ou vide |
 | `QLICK_DEMO_PASSWORD` | Un mot de passe solide pour le compte démo `demo@qlick.fr` |
 
@@ -103,6 +105,37 @@ Pour sauvegarder chaque nuit, ajoutez cette ligne avec `crontab -e` :
 
 ---
 
+## Gérer vos clients une fois en ligne
+
+### Le principe
+- **Espace agence** (`https://boost.qlick.fr/admin`), réservé à l'équipe Qlick : liste de tous vos clients avec leurs chiffres, création des comptes, choix de l'offre, suspension.
+- **Espace client** (`https://boost.qlick.fr/dashboard`), un par établissement : chaque client ne voit que ses propres données. Il personnalise sa roue (logo, couleur, textes, lots, règlement), imprime son QR code, valide les bons cadeaux et suit ses statistiques.
+- **Roue publique** (`https://boost.qlick.fr/play/nom-du-commerce`) : la page que voient les clients du commerçant, à ses couleurs et avec son logo.
+
+### Embarquer un nouveau client (10 minutes)
+1. Dans `/admin`, cliquez sur **+ Nouveau client** : nom de l'établissement, email du gérant, offre et notes internes.
+2. Un message de bienvenue s'affiche, avec l'identifiant et un mot de passe provisoire. **Copiez-le et envoyez-le** au client. Le mot de passe n'est affiché qu'une fois, mais **Nouveau mot de passe** en génère un autre.
+3. Cliquez sur **Ouvrir l'espace** pour configurer le compte à sa place (bandeau « Mode agence ») :
+   - **Personnalisation** : logo, couleur, message d'accueil, textes de gain et de perte, règlement (bouton **Partir du modèle**). L'aperçu est en direct.
+   - **Paramètres** : lien d'avis Google (Google Business Profile → « Demander des avis ») et lien Instagram.
+   - **Ma roue** : les lots et leurs probabilités.
+   - **QR code** : imprimez le chevalet ou envoyez le PNG au client.
+4. Cliquez sur **Revenir à l'espace agence**. Le client passe en statut **Actif** dès qu'un lien d'avis ou Instagram est renseigné.
+
+### Offres
+| Offre | Réponses IA | Export CSV |
+|---|---|---|
+| Essai 14 jours | ✅ | ✅ |
+| Essentiel | — | — |
+| Pro | ✅ | ✅ |
+| Réseau & sur-mesure | ✅ | ✅ |
+
+Vous changez l'offre d'un client directement dans la liste. **Suspendre** coupe immédiatement sa roue publique, par exemple en cas d'impayé. Ses données sont conservées et **Réactiver** remet tout en ligne.
+
+> L'essai de 14 jours ne s'arrête pas tout seul : passez le client en Essentiel ou Pro à la signature, ou suspendez-le. La facturation se fait dans votre outil habituel (Odoo) tant que Stripe n'est pas branché.
+
+---
+
 ## Toutes les variables d'environnement
 
 | Variable | Obligatoire | Rôle |
@@ -111,6 +144,7 @@ Pour sauvegarder chaque nuit, ajoutez cette ligne avec `crontab -e` :
 | `BASE_URL` | oui | Adresse publique, utilisée dans les QR codes et les liens des bons. Si elle commence par `https://`, les cookies sont sécurisés. |
 | `QLICK_SECRET` | oui | Au moins 32 caractères aléatoires. Sans elle, le serveur refuse de démarrer en production. **Ne la changez plus ensuite** : tout le monde serait déconnecté. |
 | `QLICK_DB` | conseillé | Emplacement du fichier de données sur le disque persistant (`/data/db.json`) |
+| `QLICK_ADMIN_EMAIL` / `QLICK_ADMIN_PASSWORD` | oui | Compte de l'équipe Qlick qui donne accès à l'espace agence `/admin`. Il est créé au premier démarrage. Pour ajouter un second administrateur, changez l'email et redémarrez : le premier compte reste admin. |
 | `ANTHROPIC_API_KEY` | non | Active les réponses aux avis par IA |
 | `QLICK_AI_MODEL` | non | Modèle Claude utilisé (`claude-opus-5-5` par défaut) |
 | `QLICK_DEMO` | non | `1` crée le compte démo et la roue `/play/demo`, utilisée par le bouton « Tester la roue » du site |
@@ -125,7 +159,8 @@ Pour sauvegarder chaque nuit, ajoutez cette ligne avec `crontab -e` :
 
 **Technique**
 - [ ] `https://boost.qlick.fr/healthz` répond `{"ok":true}`
-- [ ] Créer un compte de test, configurer la roue, scanner le QR code avec un téléphone, jouer, puis valider le bon en caisse
+- [ ] Se connecter à `/admin` avec le compte agence
+- [ ] Créer un client de test, le configurer via « Ouvrir l'espace », scanner son QR code avec un téléphone, jouer, puis valider le bon en caisse
 - [ ] Mettre en place une surveillance gratuite de `/healthz` (UptimeRobot ou Better Stack), avec alerte par email
 - [ ] Vérifier que les sauvegardes fonctionnent : sur Render, onglet **Disks → Snapshots**
 
@@ -146,6 +181,7 @@ La version actuelle convient pour lancer avec vos **premiers clients**, jusqu'à
 | Données dans un fichier JSON, un seul serveur | Passer à PostgreSQL (Render Postgres, Supabase) pour plusieurs serveurs et plus de volume |
 | Pas de paiement en ligne | Stripe Billing : essai de 14 jours, puis abonnement Essentiel ou Pro |
 | Pas de « mot de passe oublié » ni d'emails | Envoi d'emails transactionnels (Brevo, Resend) : bon cadeau, rappel avant expiration, réinitialisation du mot de passe |
-| Un compte = un établissement | Multi-établissements et accès agence pour gérer tous vos clients |
+| Un compte = un établissement | Plusieurs établissements par compte (franchises) et plusieurs utilisateurs par établissement |
+| Logo stocké dans la base | Stockage des fichiers sur S3 / Cloudflare R2 quand le nombre de clients grandit |
 | Réponses IA à copier-coller | Connexion à l'API Google Business Profile pour publier les réponses directement |
 | — | Webhook vers n8n à chaque participation (CRM, Odoo, Slack, Google Sheets) |

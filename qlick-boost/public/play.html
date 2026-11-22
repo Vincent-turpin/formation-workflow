@@ -33,6 +33,7 @@
 
   <!-- Étape 1 : choix de l'action -->
   <section class="step" id="s-action">
+    <img id="logo" alt="" hidden style="max-width:140px;max-height:90px;object-fit:contain;margin:0 auto 14px">
     <h1 id="title">Tentez votre chance !</h1>
     <p class="muted" id="welcome"></p>
     <p style="font-weight:700;margin-top:24px">Pour jouer, choisissez une action :</p>
@@ -59,7 +60,7 @@
       <label for="email">Email</label>
       <input id="email" name="email" type="email" required autocomplete="email">
       <div id="phoneWrap" hidden><label for="phone">Téléphone (optionnel)</label><input id="phone" name="phone" type="tel" autocomplete="tel"></div>
-      <label class="check"><input type="checkbox" name="consent" required> J'accepte le règlement du jeu. Une seule participation par personne sur la période définie par l'établissement.</label>
+      <label class="check"><input type="checkbox" name="consent" required> J'accepte le <a id="rulesLink" target="_blank">règlement du jeu</a>. Une seule participation par personne sur la période définie par l'établissement.</label>
       <label class="check"><input type="checkbox" name="marketingOptIn"> J'accepte de recevoir les offres de l'établissement (désinscription possible à tout moment).</label>
       <p class="error" id="form-err"></p>
       <button class="btn" style="width:100%">Accéder à la roue 🎡</button>
@@ -100,12 +101,17 @@ async function init() {
   document.getElementById('title').textContent = cfg.name;
   document.getElementById('welcome').textContent = cfg.welcomeText;
   document.getElementById('phoneWrap').hidden = !cfg.collectPhone;
+  if (cfg.logoUrl) { const l = document.getElementById('logo'); l.src = cfg.logoUrl; l.alt = cfg.name; l.hidden = false; l.style.display = 'block'; }
+  document.getElementById('rulesLink').href = `/play/${slug}/reglement`;
   document.querySelectorAll('.action').forEach((b) => {
     const a = b.dataset.action;
     const ok = cfg.actions[a] && (a === 'none' || (a === 'google' ? cfg.googleReviewUrl : cfg.instagramUrl));
     b.hidden = !ok;
     b.onclick = () => choose(a);
   });
+  if (![...document.querySelectorAll('.action')].some((b) => !b.hidden)) {
+    document.querySelector('#s-action p[style]').textContent = 'Le jeu est en cours de configuration. Revenez très bientôt !';
+  }
   wheel = new Wheel(document.getElementById('wheel'), cfg.segments);
   show('s-action');
 }
@@ -159,15 +165,15 @@ function renderResult(d) {
   if (d.kind === 'win') {
     confetti();
     const delayed = new Date(d.validFrom) > new Date();
-    el.innerHTML = `<div style="font-size:52px">🎉</div><h1>Félicitations ${escapeHtml(player.firstName)} !</h1>
+    el.innerHTML = `<div style="font-size:52px">🎉</div><h1>${escapeHtml(cfg.winText)} ${escapeHtml(player.firstName)} !</h1>
       <p class="muted">Vous avez gagné :</p><div class="prize">${escapeHtml(d.label)}</div>
       <p>Présentez ce code en boutique :</p><div class="code">${d.code}</div>
       <p class="muted" style="font-size:14px">${delayed ? `Utilisable à partir du ${fmt(d.validFrom)} · ` : ''}Valable jusqu'au ${fmt(d.expiresAt)}</p>
       <a class="btn" href="${d.couponUrl}">Ouvrir mon bon cadeau</a>
       <p class="muted" style="font-size:13px;margin-top:14px">Faites une capture d'écran pour le garder précieusement 📸</p>`;
   } else {
-    el.innerHTML = `<div style="font-size:52px">🍀</div><h1>Pas de chance cette fois…</h1>
-      <p class="muted">Merci pour votre participation ${escapeHtml(player.firstName)} ! Vous pourrez retenter votre chance lors de votre prochaine visite.</p>`;
+    el.innerHTML = `<div style="font-size:52px">🍀</div><h1>Merci ${escapeHtml(player.firstName)} !</h1>
+      <p class="muted">${escapeHtml(cfg.loseText || 'Pas de chance cette fois… Retentez votre chance lors de votre prochaine visite !')}</p>`;
   }
   show('s-result');
 }

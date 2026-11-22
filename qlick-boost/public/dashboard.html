@@ -37,6 +37,7 @@
     .redeem-box { max-width: 520px; }
     .redeem-box input { font-family: ui-monospace, monospace; font-size: 22px; letter-spacing: .08em; text-transform: uppercase; text-align: center; }
     .table-wrap { overflow-x: auto; }
+    @media (min-width: 1100px) { .brand-grid { grid-template-columns: minmax(0, 1fr) 340px; } }
   </style>
 </head>
 <body>
@@ -46,6 +47,7 @@
     <nav id="nav">
       <button data-tab="overview" class="on">📊 Vue d'ensemble</button>
       <button data-tab="wheel">🎡 Ma roue</button>
+      <button data-tab="brand">🎨 Personnalisation</button>
       <button data-tab="settings">⚙️ Paramètres</button>
       <button data-tab="qr">📱 QR code</button>
       <button data-tab="redeem">🎟️ Valider un gain</button>
@@ -60,8 +62,12 @@
   </aside>
 
   <main>
+    <div id="impBanner" class="card" hidden style="margin-bottom:20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;border-color:rgba(217,70,239,.5);background:rgba(217,70,239,.1);padding:14px 18px">
+      <span>🛠️ <b>Mode agence</b> : vous êtes connecté à l'espace de ce client.</span>
+      <button class="btn small" id="stopImp" style="margin-left:auto">Revenir à l'espace agence</button>
+    </div>
     <div class="top">
-      <div><h1 id="bizName" style="margin:0 0 8px;font-size:clamp(1.4rem,3vw,2rem)">…</h1><span class="badge">Essai gratuit · 14 jours</span></div>
+      <div><h1 id="bizName" style="margin:0 0 8px;font-size:clamp(1.4rem,3vw,2rem)">…</h1><span class="badge" id="planBadge"></span></div>
       <a class="btn ghost small" id="openPlay" target="_blank">Ouvrir ma roue ↗</a>
     </div>
 
@@ -99,11 +105,7 @@
     <!-- Paramètres -->
     <section class="tab" id="tab-settings">
       <form class="card" id="settingsForm" style="max-width:720px">
-        <h3>Établissement</h3>
-        <label>Nom affiché</label><input name="name" required>
-        <label>Message d'accueil</label><input name="welcomeText">
-        <label>Couleur principale</label><input name="primaryColor" type="color" style="max-width:120px;height:46px">
-        <h3 style="margin-top:28px">Actions pour jouer</h3>
+        <h3>Actions pour jouer</h3>
         <label class="check"><input type="checkbox" name="act_google"> Avis Google</label>
         <label>Lien vers votre formulaire d'avis Google</label>
         <input name="googleReviewUrl" placeholder="https://g.page/r/XXXXXXXX/review">
@@ -122,6 +124,58 @@
         <p class="error" id="setErr"></p>
         <button class="btn">Enregistrer</button>
       </form>
+      <form class="card" id="pwdForm" style="max-width:720px;margin-top:20px">
+        <h3>Mon compte</h3>
+        <p class="muted" style="margin-top:0">Identifiant : <b id="accEmail"></b></p>
+        <div class="grid g2">
+          <div><label>Mot de passe actuel</label><input name="current" type="password" required autocomplete="current-password"></div>
+          <div><label>Nouveau mot de passe</label><input name="next" type="password" minlength="8" required autocomplete="new-password"></div>
+        </div>
+        <p class="error" id="pwdErr"></p>
+        <button class="btn ghost">Changer mon mot de passe</button>
+      </form>
+    </section>
+
+    <!-- Personnalisation -->
+    <section class="tab" id="tab-brand">
+      <div class="grid" style="grid-template-columns:minmax(0,1fr)">
+        <div class="grid brand-grid">
+          <form class="card" id="brandForm">
+            <h3>Votre image de marque</h3>
+            <p class="muted" style="margin-top:0">C'est ce que voient vos clients quand ils scannent votre QR code.</p>
+            <label>Logo (PNG, JPG ou WebP, 300 Ko max)</label>
+            <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+              <div id="logoBox" style="width:84px;height:84px;border-radius:16px;border:1px dashed var(--line);display:grid;place-items:center;overflow:hidden;background:#fff"></div>
+              <label class="btn ghost small" style="margin:0">Choisir un fichier<input type="file" id="logoFile" accept="image/png,image/jpeg,image/webp" hidden></label>
+              <button type="button" class="btn ghost small" id="logoRemove">Retirer</button>
+            </div>
+            <label>Nom affiché</label><input name="name" required maxlength="80">
+            <label>Couleur principale</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <input name="primaryColor" type="color" style="max-width:90px">
+              <span class="muted" style="font-size:13px">Suggestions :</span>
+              <span id="swatches" style="display:flex;gap:6px"></span>
+            </div>
+            <label>Message d'accueil</label><input name="welcomeText" maxlength="200">
+            <label>Titre en cas de gain</label><input name="winText" maxlength="120" placeholder="Félicitations !">
+            <label>Message en cas de perte</label><textarea name="loseText" rows="2" maxlength="300"></textarea>
+            <label>Règlement du jeu</label>
+            <textarea name="rulesText" rows="7" placeholder="Laissez vide pour utiliser le règlement type, généré automatiquement à partir de vos lots et de vos règles."></textarea>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+              <button type="button" class="btn ghost small" id="rulesTpl">Partir du modèle</button>
+              <a class="btn ghost small" id="rulesView" target="_blank">Voir le règlement publié ↗</a>
+            </div>
+            <p class="error" id="brandErr"></p>
+            <button class="btn">Enregistrer et mettre à jour l'aperçu</button>
+          </form>
+          <div class="card" style="text-align:center;position:sticky;top:20px;align-self:start">
+            <h3>Aperçu en direct</h3>
+            <div style="margin:0 auto;width:300px;border-radius:38px;padding:10px;background:linear-gradient(160deg,rgba(139,92,246,.5),rgba(217,70,239,.25))">
+              <iframe id="livePreview" title="Aperçu de la roue" style="width:280px;height:540px;border:0;border-radius:30px;background:#fff"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- QR -->
@@ -163,7 +217,7 @@
     <!-- Contacts -->
     <section class="tab" id="tab-contacts">
       <div class="card">
-        <div class="top" style="margin-bottom:10px"><h3 style="margin:0">Participants</h3><a class="btn small" href="/api/participations.csv">Exporter en CSV</a></div>
+        <div class="top" style="margin-bottom:10px"><h3 style="margin:0">Participants</h3><a class="btn small" id="csvBtn" href="/api/participations.csv">Exporter en CSV</a></div>
         <input id="search" placeholder="Rechercher un nom, email, code…" style="margin-bottom:12px">
         <div class="table-wrap"><table><thead><tr><th>Date</th><th>Client</th><th>Action</th><th>Lot</th><th>Code</th><th>Statut</th><th>Opt-in</th></tr></thead><tbody id="rows"></tbody></table></div>
       </div>
@@ -215,12 +269,19 @@ $('#nav').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   document.querySelectorAll('#nav button').forEach((x) => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
-  ({ overview: loadStats, wheel: loadPrizes, contacts: loadContacts, ai: loadReviews, settings: fillSettings })[b.dataset.tab]?.();
+  ({ overview: loadStats, wheel: loadPrizes, contacts: loadContacts, ai: loadReviews, settings: fillSettings, brand: fillBrand })[b.dataset.tab]?.();
 };
 $('#logout').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; };
 
 async function init() {
   me = await api('/api/me');
+  if (!me.business) { location.href = me.role === 'admin' ? '/admin' : '/login'; return; }
+  $('#impBanner').hidden = !me.impersonating;
+  if (me.impersonating) $('#impBanner').style.display = 'flex'; else $('#impBanner').style.display = 'none';
+  $('#planBadge').textContent = `Offre ${me.plan.label}`;
+  $('#accEmail').textContent = me.email;
+  if (!me.plan.csv) { $('#csvBtn').removeAttribute('href'); $('#csvBtn').classList.add('ghost'); $('#csvBtn').textContent = 'Export CSV : offre Pro'; $('#csvBtn').onclick = () => toast('Export inclus dans l\'offre Pro : contactez Qlick'); }
+  if (!me.plan.ai) $('#aiForm').insertAdjacentHTML('afterbegin', '<p class="badge" style="margin:0 0 12px">Réponses IA incluses dans l\'offre Pro — contactez Qlick pour en profiter</p>');
   $('#bizName').textContent = me.business.name;
   $('#me').textContent = me.email;
   $('#openPlay').href = me.playUrl;
@@ -245,6 +306,7 @@ async function loadStats() {
   const b = me.business;
   const steps = [
     [!!b.googleReviewUrl || !!b.instagramUrl, 'Renseigner votre lien d\'avis Google ou Instagram', 'settings'],
+    [!!b.logo, 'Ajouter votre logo et vos couleurs', 'brand'],
     [true, 'Personnaliser les lots de votre roue', 'wheel'],
     [s.totalParticipations > 0, 'Imprimer et afficher votre QR code', 'qr'],
     [s.redeemed > 0, 'Valider votre premier bon cadeau en caisse', 'redeem'],
@@ -293,7 +355,7 @@ function updatePreview() {
 // ----- paramètres -----
 function fillSettings() {
   const f = $('#settingsForm'), b = me.business;
-  for (const k of ['name', 'welcomeText', 'primaryColor', 'googleReviewUrl', 'instagramUrl', 'cooldownDays', 'couponValidityDays', 'minDelayHours']) f[k].value = b[k] ?? '';
+  for (const k of ['googleReviewUrl', 'instagramUrl', 'cooldownDays', 'couponValidityDays', 'minDelayHours']) f[k].value = b[k] ?? '';
   f.collectPhone.checked = !!b.collectPhone;
   f.act_google.checked = b.actions.google; f.act_instagram.checked = b.actions.instagram; f.act_none.checked = b.actions.none;
 }
@@ -301,7 +363,6 @@ $('#settingsForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target;
   const body = {
-    name: f.name.value, welcomeText: f.welcomeText.value, primaryColor: f.primaryColor.value,
     googleReviewUrl: f.googleReviewUrl.value.trim(), instagramUrl: f.instagramUrl.value.trim(),
     cooldownDays: f.cooldownDays.value, couponValidityDays: f.couponValidityDays.value, minDelayHours: f.minDelayHours.value,
     collectPhone: f.collectPhone.checked,
@@ -311,10 +372,53 @@ $('#settingsForm').onsubmit = async (e) => {
   if (body.actions.google && !body.googleReviewUrl) return ($('#setErr').textContent = 'Renseignez le lien d\'avis Google.');
   if (body.actions.instagram && !body.instagramUrl) return ($('#setErr').textContent = 'Renseignez le lien Instagram.');
   $('#setErr').textContent = '';
-  me.business = await api('/api/business', { method: 'PUT', body });
-  $('#bizName').textContent = me.business.name;
-  document.documentElement.style.setProperty('--brand', me.business.primaryColor);
-  toast('Paramètres enregistrés ✅');
+  try { me.business = await api('/api/business', { method: 'PUT', body }); toast('Paramètres enregistrés ✅'); }
+  catch (err) { $('#setErr').textContent = err.message; }
+};
+$('#pwdForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try { await api('/api/auth/password', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) }); e.target.reset(); $('#pwdErr').textContent = ''; toast('Mot de passe modifié ✅'); }
+  catch (err) { $('#pwdErr').textContent = err.message; }
+};
+$('#stopImp').onclick = async () => { const r = await api('/api/admin/stop-impersonate', { method: 'POST' }); location.href = r.redirect; };
+
+// ----- personnalisation -----
+let logoData;
+const SWATCHES = ['#8B5CF6', '#D946EF', '#E11D48', '#EA580C', '#CA8A04', '#16A34A', '#0891B2', '#2563EB', '#111827'];
+function renderLogo() {
+  $('#logoBox').innerHTML = logoData ? `<img src="${logoData}" alt="Logo" style="max-width:100%;max-height:100%;object-fit:contain">` : '<span class="muted" style="font-size:12px;color:#6B6390">Aucun logo</span>';
+}
+function fillBrand() {
+  const f = $('#brandForm'), b = me.business;
+  for (const k of ['name', 'primaryColor', 'welcomeText', 'winText', 'loseText', 'rulesText']) f[k].value = b[k] ?? '';
+  logoData = b.logo; renderLogo();
+  $('#swatches').innerHTML = SWATCHES.map((c) => `<button type="button" data-c="${c}" title="${c}" style="width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:${c};cursor:pointer"></button>`).join('');
+  $('#rulesView').href = `/play/${b.slug}/reglement`;
+  refreshPreview();
+}
+function refreshPreview() { $("#livePreview").src = `/play/${me.business.slug}?preview=1&t=${Date.now()}`; }
+$('#swatches').onclick = (e) => { if (e.target.dataset.c) $('#brandForm').primaryColor.value = e.target.dataset.c; };
+$('#logoFile').onchange = (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  if (file.size > 300 * 1024) { $('#brandErr').textContent = 'Logo trop lourd (300 Ko max). Astuce : compressez-le sur squoosh.app'; return; }
+  const r = new FileReader(); r.onload = () => { logoData = r.result; renderLogo(); $('#brandErr').textContent = ''; }; r.readAsDataURL(file);
+};
+$('#logoRemove').onclick = () => { logoData = null; renderLogo(); };
+$('#rulesTpl').onclick = async () => {
+  const f = $('#brandForm');
+  if (f.rulesText.value.trim() && !confirm('Remplacer le texte actuel par le modèle ?')) return;
+  f.rulesText.value = (await api('/api/rules-template')).rules;
+};
+$('#brandForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  const body = { name: f.name.value, primaryColor: f.primaryColor.value, welcomeText: f.welcomeText.value, winText: f.winText.value, loseText: f.loseText.value, rulesText: f.rulesText.value, logo: logoData || null };
+  try {
+    me.business = await api('/api/business', { method: 'PUT', body });
+    $('#bizName').textContent = me.business.name; $('#brandErr').textContent = '';
+    document.documentElement.style.setProperty('--brand', me.business.primaryColor);
+    refreshPreview(); toast('Personnalisation enregistrée ✅');
+  } catch (err) { $('#brandErr').textContent = err.message; }
 };
 
 // ----- QR imprimable -----

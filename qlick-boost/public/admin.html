@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Espace agence — Qlick Boost</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    header.bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 16px; padding: 14px clamp(16px, 3vw, 40px);
+      background: rgba(10, 5, 22, .75); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--line); }
+    header.bar .right { margin-left: auto; display: flex; gap: 10px; align-items: center; font-size: 14px; color: var(--mute); }
+    main { padding: 28px clamp(16px, 3vw, 40px); max-width: 1280px; margin: 0 auto; }
+    .kpi .v { font: 700 28px/1.1 var(--display); background: linear-gradient(100deg, #fff, var(--lilac) 50%, var(--plasma)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .kpi .l { color: var(--muted); font-size: 14px; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+    .toolbar input { max-width: 320px; }
+    .toolbar select { width: auto; }
+    .table-wrap { overflow-x: auto; }
+    td .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    td select { width: auto; padding: 6px 10px; font-size: 13px; }
+    .creds { white-space: pre-wrap; background: rgba(139, 92, 246, .08); border: 1px solid var(--line); border-radius: 14px; padding: 16px; font-size: 14px; }
+    .dim { opacity: .5; }
+    dialog { background: var(--deep); color: var(--star); border: 1px solid var(--line); border-radius: 20px; padding: 24px; width: min(560px, 92vw); }
+    dialog::backdrop { background: rgba(6, 3, 13, .75); backdrop-filter: blur(4px); }
+  </style>
+</head>
+<body>
+<header class="bar">
+  <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="qg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8B5CF6"/><stop offset="1" stop-color="#D946EF"/></linearGradient></defs><circle cx="15" cy="15" r="10.5" fill="none" stroke="url(#qg)" stroke-width="3.2"/><circle cx="24.5" cy="24.5" r="3.6" fill="#F3EEFF"/></svg>Qlick <small>Agence</small></a>
+  <div class="right"><span id="me"></span><button class="btn ghost small" id="logout">Déconnexion</button></div>
+</header>
+
+<main>
+  <div class="kicker">Espace agence</div>
+  <h1 style="font-size:clamp(1.5rem,3vw,2.2rem)">Vos clients Qlick Boost</h1>
+
+  <div class="grid g4" id="kpis" style="margin:22px 0"></div>
+
+  <div class="grid" style="grid-template-columns:minmax(0,1fr)">
+    <div class="card">
+      <div class="toolbar">
+        <h3 style="margin:0 auto 0 0">Clients</h3>
+        <input id="search" placeholder="Rechercher un client, un email…">
+        <select id="filter"><option value="">Tous les statuts</option><option value="active">Actifs</option><option value="suspended">Suspendus</option><option value="todo">À configurer</option></select>
+        <button class="btn small" id="openCreate">+ Nouveau client</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Établissement</th><th>Offre</th><th>Participations (30 j)</th><th>Avis Google</th><th>Dernière activité</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+    </div>
+  </div>
+</main>
+
+<dialog id="createDlg">
+  <form id="createForm" method="dialog">
+    <h2 style="font-size:1.3rem">Nouveau client</h2>
+    <p class="muted" style="margin-top:0">Un espace personnalisable est créé avec une roue par défaut. Vous pourrez ensuite le configurer à sa place.</p>
+    <label>Nom de l'établissement</label><input name="businessName" required placeholder="Ex. Kaza Street Food">
+    <label>Email du client (identifiant de connexion)</label><input name="email" type="email" required>
+    <label>Offre</label><select name="plan" id="planSelect"></select>
+    <label>Notes internes (non visibles par le client)</label><textarea name="notes" rows="2" placeholder="Contact, conditions, date de signature…"></textarea>
+    <p class="error" id="createErr"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button class="btn ghost" type="button" id="cancelCreate">Annuler</button>
+      <button class="btn" type="submit">Créer l'espace client</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="credsDlg">
+  <h2 style="font-size:1.3rem" id="credsTitle">Espace client créé ✅</h2>
+  <p class="muted" style="margin-top:0">Le mot de passe n'est affiché qu'une seule fois. Copiez ce message et envoyez-le au client.</p>
+  <div class="creds" id="credsText"></div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+    <button class="btn ghost" id="closeCreds">Fermer</button>
+    <button class="btn" id="copyCreds">Copier le message</button>
+  </div>
+</dialog>
+
+<dialog id="notesDlg">
+  <form id="notesForm" method="dialog">
+    <h2 style="font-size:1.3rem" id="notesTitle">Notes</h2>
+    <textarea name="notes" rows="5"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
+      <button class="btn ghost" type="button" id="cancelNotes">Annuler</button>
+      <button class="btn" type="submit">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const toast = (t) => { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.appendChild(d); setTimeout(() => d.remove(), 2400); };
+const api = async (url, opts = {}) => {
+  const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  if (res.status === 401) { location.href = '/login'; throw new Error('401'); }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error);
+  return data;
+};
+let clients = [], plans = {};
+
+async function init() {
+  const me = await api('/api/me');
+  if (me.role !== 'admin') { location.href = '/dashboard'; return; }
+  $('#me').textContent = me.email;
+  await load();
+}
+async function load() {
+  const d = await api('/api/admin/clients');
+  clients = d.clients; plans = d.plans;
+  $('#planSelect').innerHTML = Object.entries(plans).map(([k, p]) => `<option value="${k}">${esc(p.label)}</option>`).join('');
+  const active = clients.filter((c) => c.active);
+  const kpi = (v, l) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#kpis').innerHTML = kpi(active.length, 'Clients actifs') + kpi(clients.filter((c) => c.plan === 'trial').length, 'En période d\'essai')
+    + kpi(clients.reduce((s, c) => s + c.last30, 0), 'Participations sur 30 jours') + kpi(clients.reduce((s, c) => s + c.googleReviews, 0), 'Avis Google générés');
+  render();
+}
+function render() {
+  const q = $('#search').value.toLowerCase(), f = $('#filter').value;
+  const list = clients.filter((c) => (!q || `${c.name} ${c.ownerEmail} ${c.slug}`.toLowerCase().includes(q))
+    && (!f || (f === 'active' && c.active) || (f === 'suspended' && !c.active) || (f === 'todo' && !c.configured)));
+  const date = (s) => s ? new Date(s).toLocaleDateString('fr-FR') : '—';
+  $('#rows').innerHTML = list.map((c) => `<tr class="${c.active ? '' : 'dim'}">
+    <td><b>${esc(c.name)}</b><br><span class="muted" style="font-size:13px">${esc(c.ownerEmail || '—')}</span>${c.notes ? `<br><span class="muted" style="font-size:12px">📝 ${esc(c.notes.slice(0, 60))}</span>` : ''}</td>
+    <td><select data-plan="${c.id}">${Object.entries(plans).map(([k, p]) => `<option value="${k}" ${k === c.plan ? 'selected' : ''}>${esc(p.label)}</option>`).join('')}</select></td>
+    <td>${c.last30} <span class="muted">/ ${c.participations}</span></td>
+    <td>${c.googleReviews}</td>
+    <td>${date(c.lastActivity)}</td>
+    <td>${!c.active ? '<span class="badge grey">Suspendu</span>' : c.configured ? '<span class="badge ok">Actif</span>' : '<span class="badge">À configurer</span>'}</td>
+    <td><div class="actions">
+      <button class="btn small" data-open="${c.id}" title="Ouvrir et configurer son espace">Ouvrir l'espace</button>
+      <a class="btn ghost small" href="${esc(c.playUrl)}" target="_blank" title="Voir la roue">Roue ↗</a>
+      <button class="btn ghost small" data-notes="${c.id}">Notes</button>
+      <button class="btn ghost small" data-reset="${c.id}">Nouveau mot de passe</button>
+      <button class="btn ${c.active ? 'danger' : 'ghost'} small" data-toggle="${c.id}">${c.active ? 'Suspendre' : 'Réactiver'}</button>
+    </div></td></tr>`).join('') || '<tr><td colspan="7" class="muted">Aucun client. Cliquez sur « + Nouveau client » pour commencer.</td></tr>';
+}
+$('#search').oninput = render; $('#filter').onchange = render;
+
+$('#rows').onchange = async (e) => {
+  const id = e.target.dataset.plan; if (!id) return;
+  await api(`/api/admin/clients/${id}`, { method: 'PUT', body: { plan: e.target.value } });
+  toast('Offre mise à jour'); load();
+};
+$('#rows').onclick = async (e) => {
+  const t = e.target.closest('button'); if (!t) return;
+  const c = clients.find((x) => x.id === (t.dataset.open || t.dataset.toggle || t.dataset.reset || t.dataset.notes));
+  if (t.dataset.open) { const r = await api(`/api/admin/clients/${c.id}/impersonate`, { method: 'POST' }); location.href = r.redirect; }
+  if (t.dataset.toggle) {
+    if (c.active && !confirm(`Suspendre ${c.name} ? Sa roue ne sera plus accessible par ses clients.`)) return;
+    await api(`/api/admin/clients/${c.id}`, { method: 'PUT', body: { active: !c.active } });
+    toast(c.active ? 'Client suspendu' : 'Client réactivé'); load();
+  }
+  if (t.dataset.reset) {
+    if (!confirm(`Générer un nouveau mot de passe pour ${c.name} ? L'ancien ne fonctionnera plus.`)) return;
+    const r = await api(`/api/admin/clients/${c.id}/reset-password`, { method: 'POST' });
+    showCreds(c.name, r.credentials, 'Nouveau mot de passe généré 🔑');
+  }
+  if (t.dataset.notes) {
+    $('#notesTitle').textContent = `Notes — ${c.name}`; $('#notesForm').notes.value = c.notes; $('#notesForm').dataset.id = c.id;
+    $('#notesDlg').showModal();
+  }
+};
+$('#notesForm').onsubmit = async (e) => {
+  await api(`/api/admin/clients/${e.target.dataset.id}`, { method: 'PUT', body: { notes: e.target.notes.value } });
+  toast('Notes enregistrées'); load();
+};
+$('#cancelNotes').onclick = () => $('#notesDlg').close();
+
+$('#openCreate').onclick = () => { $('#createForm').reset(); $('#createErr').textContent = ''; $('#createDlg').showModal(); };
+$('#cancelCreate').onclick = () => $('#createDlg').close();
+$('#createForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    const r = await api('/api/admin/clients', { method: 'POST', body: Object.fromEntries(new FormData(e.target)) });
+    $('#createDlg').close(); load();
+    showCreds(r.client.name, r.credentials, 'Espace client créé ✅');
+  } catch (err) { $('#createErr').textContent = err.message; }
+};
+
+function showCreds(name, c, title) {
+  $('#credsTitle').textContent = title;
+  $('#credsText').textContent = `Bonjour,
+
+Votre espace Qlick Boost pour ${name} est prêt !
+
+Connexion : ${c.loginUrl}
+Identifiant : ${c.email}
+Mot de passe provisoire : ${c.password}
+
+Pensez à changer votre mot de passe depuis l'onglet « Paramètres ».
+Vous y retrouverez votre roue, votre QR code à imprimer, la validation des bons cadeaux et vos statistiques.
+
+Une question ? Répondez simplement à cet email ou appelez-nous au 07 66 71 42 84.
+
+L'équipe Qlick`;
+  $('#credsDlg').showModal();
+}
+$('#copyCreds').onclick = () => { navigator.clipboard.writeText($('#credsText').textContent); toast('Message copié'); };
+$('#closeCreds').onclick = () => $('#credsDlg').close();
+$('#logout').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/login'; };
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Règlement du jeu</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    main { max-width: 760px; margin: 0 auto; padding: 36px 20px 60px; }
+    .rules { white-space: pre-wrap; line-height: 1.7; }
+  </style>
+</head>
+<body class="light">
+<main>
+  <p><a href="#" id="back">← Retour au jeu</a></p>
+  <h1 id="title" style="font-size:1.6rem">Règlement du jeu</h1>
+  <div class="card rules" id="rules">Chargement…</div>
+  <p class="muted" style="font-size:13px;margin-top:24px">Plateforme fournie par <a href="https://qlick.fr" target="_blank" rel="noopener">Qlick</a>.</p>
+</main>
+<script>
+(async () => {
+  const slug = location.pathname.split('/')[2];
+  document.getElementById('back').href = `/play/${slug}`;
+  const res = await fetch(`/api/public/${encodeURIComponent(slug)}/rules`);
+  if (!res.ok) { document.getElementById('rules').textContent = 'Règlement introuvable.'; return; }
+  const d = await res.json();
+  document.documentElement.style.setProperty('--brand', d.primaryColor);
+  document.title = `Règlement du jeu — ${d.name}`;
+  document.getElementById('title').textContent = `Règlement du jeu — ${d.name}`;
+  document.getElementById('rules').textContent = d.rules;
+})();
+</script>
+</body>
+</html>

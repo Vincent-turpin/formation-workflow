@@ -39,7 +39,7 @@ app.use((req, res, next) => {
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 const SIGNUP_CODE = process.env.QLICK_SIGNUP_CODE || '';
 app.get('/api/config', (req, res) => res.json({ demo: DEMO, inviteRequired: !!SIGNUP_CODE }));
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
 // ---------- utilitaires ----------
@@ -92,6 +92,33 @@ function couponCode() {
   return c;
 }
 
+// fonctionnalités par offre (voir la page Tarifs)
+const PLANS = {
+  trial: { label: 'Essai 14 jours', ai: true, csv: true },
+  essentiel: { label: 'Essentiel', ai: false, csv: false },
+  pro: { label: 'Pro', ai: true, csv: true },
+  reseau: { label: 'Réseau & sur-mesure', ai: true, csv: true },
+};
+const planOf = (b) => PLANS[b?.plan] || PLANS.trial;
+
+// comptes administrateurs Qlick : définis par QLICK_ADMIN_EMAIL / QLICK_ADMIN_PASSWORD
+function ensureAdmin() {
+  const email = (process.env.QLICK_ADMIN_EMAIL || (PROD ? '' : 'admin@qlick.fr')).trim().toLowerCase();
+  const password = process.env.QLICK_ADMIN_PASSWORD || (PROD ? '' : 'admin1234');
+  if (!email || !password) {
+    if (PROD) console.warn('Aucun administrateur Qlick : définissez QLICK_ADMIN_EMAIL et QLICK_ADMIN_PASSWORD.');
+    return;
+  }
+  const data = db.load();
+  let u = data.users.find((x) => x.email === email);
+  if (!u) {
+    u = { id: uid(), email, password: hashPassword(password), createdAt: now(), role: 'admin' };
+    data.users.push(u);
+    console.log(`Administrateur Qlick créé : ${email}`);
+  } else if (u.role !== 'admin') u.role = 'admin';
+  db.save();
+}
+
 const DEFAULT_PRIZES = [
   { label: 'Café offert', color: '#8B5CF6', weight: 30, stock: null, kind: 'win' },
   { label: '-10% sur l\'addition', color: '#D946EF', weight: 25, stock: null, kind: 'win' },
@@ -109,9 +136,25 @@ function requireAuth(req, res, next) {
   const user = data.users.find((u) => u.id === s.uid);
   if (!user) return res.status(401).json({ error: 'Session invalide' });
   req.user = user;
+  req.session = s;
   req.business = data.businesses.find((b) => b.ownerId === user.id);
   next();
 }
+function requireBusiness(req, res, next) {
+  if (!req.business) return res.status(403).json({ error: 'Aucun établissement lié à ce compte' });
+  next();
+}
+function requireAdmin(req, res, next) {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Réservé à l\'équipe Qlick' });
+  next();
+}
+function requirePlan(feature) {
+  return (req, res, next) => {
+    if (!planOf(req.business)[feature]) return res.status(402).json({ error: 'Fonctionnalité incluse dans l\'offre Pro. Contactez Qlick pour changer d\'offre.' });
+    next();
+  };
+}
+const startSession = (res, payload) => setCookie(res, 'qlick_session', sign({ ...payload, exp: Date.now() + 7 * 864e5 }), 7 * 86400);
 
 function createBusinessFor(user, name) {
   const data = db.load();
@@ -121,9 +164,11 @@ function createBusinessFor(user, name) {
     id: uid(), ownerId: user.id, name, slug, createdAt: now(),
     googleReviewUrl: '', instagramUrl: '', primaryColor: '#8B5CF6',
     welcomeText: `Tentez votre chance chez ${name} !`,
-    actions: { google: true, instagram: false, none: false },
+    actions: { google: true, instagram: false, none: true },
     cooldownDays: 30, couponValidityDays: 30, minDelayHours: 0,
-    collectPhone: false, plan: 'trial',
+    collectPhone: false, plan: 'trial', active: true,
+    logo: null, winText: 'Félicitations !', loseText: 'Pas de chance cette fois… Merci pour votre participation, retentez votre chance lors de votre prochaine visite !',
+    rulesText: '', notes: '',
   };
   data.businesses.push(business);
   DEFAULT_PRIZES.forEach((p) => data.prizes.push({ id: uid(), businessId: business.id, ...p, active: true }));
@@ -142,8 +187,8 @@ app.post('/api/auth/signup', (req, res) => {
   const user = { id: uid(), email: e, password: hashPassword(password), createdAt: now() };
   data.users.push(user);
   createBusinessFor(user, businessName.trim());
-  setCookie(res, 'qlick_session', sign({ uid: user.id, exp: Date.now() + 7 * 864e5 }), 7 * 86400);
-  res.json({ ok: true });
+  startSession(res, { uid: user.id });
+  res.json({ ok: true, redirect: '/dashboard' });
 });
 
 app.post('/api/auth/login', (req, res) => {
@@ -151,7 +196,17 @@ app.post('/api/auth/login', (req, res) => {
   const data = db.load();
   const user = data.users.find((u) => u.email === String(email || '').trim().toLowerCase());
   if (!user || !verifyPassword(String(password || ''), user.password)) return res.status(401).json({ error: 'Identifiants incorrects' });
-  setCookie(res, 'qlick_session', sign({ uid: user.id, exp: Date.now() + 7 * 864e5 }), 7 * 86400);
+  startSession(res, { uid: user.id });
+  res.json({ ok: true, redirect: user.role === 'admin' ? '/admin' : '/dashboard' });
+});
+
+app.post('/api/auth/password', requireAuth, (req, res) => {
+  const { current, next } = req.body || {};
+  if (req.session.as) return res.status(403).json({ error: 'Impossible en mode « connecté en tant que »' });
+  if (!verifyPassword(String(current || ''), req.user.password)) return res.status(401).json({ error: 'Mot de passe actuel incorrect' });
+  if (String(next || '').length < 8) return res.status(400).json({ error: 'Nouveau mot de passe : 8 caractères minimum' });
+  req.user.password = hashPassword(String(next));
+  db.save();
   res.json({ ok: true });
 });
 
@@ -161,14 +216,29 @@ app.post('/api/auth/logout', (req, res) => {
 });
 
 app.get('/api/me', requireAuth, (req, res) => {
-  res.json({ email: req.user.email, business: req.business, playUrl: `${BASE_URL}/play/${req.business.slug}` });
+  const b = req.business;
+  res.json({
+    email: req.user.email, role: req.user.role || 'client', impersonating: !!req.session.as,
+    business: b || null, plan: b ? { id: b.plan, ...planOf(b) } : null,
+    playUrl: b ? `${BASE_URL}/play/${b.slug}` : null,
+  });
 });
 
 // ---------- configuration du commerce ----------
-const EDITABLE = ['name', 'googleReviewUrl', 'instagramUrl', 'primaryColor', 'welcomeText', 'cooldownDays', 'couponValidityDays', 'minDelayHours', 'collectPhone', 'actions'];
-app.put('/api/business', requireAuth, (req, res) => {
+const EDITABLE = ['name', 'googleReviewUrl', 'instagramUrl', 'primaryColor', 'welcomeText', 'cooldownDays', 'couponValidityDays', 'minDelayHours', 'collectPhone', 'actions', 'winText', 'loseText', 'rulesText'];
+const TEXT_LIMITS = { name: 80, welcomeText: 200, winText: 120, loseText: 300, rulesText: 8000, googleReviewUrl: 500, instagramUrl: 500 };
+app.put('/api/business', requireAuth, requireBusiness, (req, res) => {
   const b = req.business;
   for (const k of EDITABLE) if (k in req.body) b[k] = req.body[k];
+  for (const [k, max] of Object.entries(TEXT_LIMITS)) b[k] = String(b[k] ?? '').slice(0, max);
+  if (!/^#[0-9a-f]{6}$/i.test(b.primaryColor)) b.primaryColor = '#8B5CF6';
+  for (const k of ['googleReviewUrl', 'instagramUrl']) if (b[k] && !/^https:\/\//i.test(b[k])) b[k] = '';
+  if ('logo' in req.body) {
+    const logo = req.body.logo;
+    if (logo === null) b.logo = null;
+    else if (/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(logo) && logo.length < 400_000) b.logo = logo;
+    else return res.status(400).json({ error: 'Logo : PNG, JPG ou WebP de 300 Ko maximum' });
+  }
   b.cooldownDays = Math.max(0, Number(b.cooldownDays) || 0);
   b.couponValidityDays = Math.max(1, Number(b.couponValidityDays) || 30);
   b.minDelayHours = Math.max(0, Number(b.minDelayHours) || 0);
@@ -177,11 +247,11 @@ app.put('/api/business', requireAuth, (req, res) => {
 });
 
 // ---------- lots ----------
-app.get('/api/prizes', requireAuth, (req, res) => {
+app.get('/api/prizes', requireAuth, requireBusiness, (req, res) => {
   res.json(db.load().prizes.filter((p) => p.businessId === req.business.id));
 });
 
-app.put('/api/prizes', requireAuth, (req, res) => {
+app.put('/api/prizes', requireAuth, requireBusiness, (req, res) => {
   const list = Array.isArray(req.body) ? req.body : [];
   if (list.length < 2 || list.length > 12) return res.status(400).json({ error: 'La roue doit contenir entre 2 et 12 segments' });
   const data = db.load();
@@ -202,7 +272,7 @@ app.put('/api/prizes', requireAuth, (req, res) => {
 });
 
 // ---------- statistiques ----------
-app.get('/api/stats', requireAuth, (req, res) => {
+app.get('/api/stats', requireAuth, requireBusiness, (req, res) => {
   const data = db.load();
   const parts = data.participations.filter((p) => p.businessId === req.business.id);
   const days = 30;
@@ -228,13 +298,13 @@ app.get('/api/stats', requireAuth, (req, res) => {
 });
 
 // ---------- participants / CRM ----------
-app.get('/api/participations', requireAuth, (req, res) => {
+app.get('/api/participations', requireAuth, requireBusiness, (req, res) => {
   const list = db.load().participations.filter((p) => p.businessId === req.business.id)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   res.json(list);
 });
 
-app.get('/api/participations.csv', requireAuth, (req, res) => {
+app.get('/api/participations.csv', requireAuth, requireBusiness, requirePlan('csv'), (req, res) => {
   const list = db.load().participations.filter((p) => p.businessId === req.business.id);
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const rows = [['date', 'prenom', 'email', 'telephone', 'action', 'lot', 'code', 'utilise_le', 'optin_marketing']]
@@ -245,7 +315,7 @@ app.get('/api/participations.csv', requireAuth, (req, res) => {
 });
 
 // ---------- validation des gains en caisse ----------
-app.post('/api/redeem', requireAuth, (req, res) => {
+app.post('/api/redeem', requireAuth, requireBusiness, (req, res) => {
   const code = String(req.body.code || '').trim().toUpperCase();
   const data = db.load();
   const p = data.participations.find((x) => x.code === code && x.businessId === req.business.id);
@@ -262,18 +332,18 @@ app.post('/api/redeem', requireAuth, (req, res) => {
 });
 
 // ---------- QR code ----------
-app.get('/api/qrcode.png', requireAuth, async (req, res) => {
+app.get('/api/qrcode.png', requireAuth, requireBusiness, async (req, res) => {
   const url = `${BASE_URL}/play/${req.business.slug}?src=qr`;
   const png = await QRCode.toBuffer(url, { width: Number(req.query.size) || 600, margin: 2, color: { dark: '#110824', light: '#FFFFFF' } });
   res.type('png').send(png);
 });
 
 // ---------- IA : réponses aux avis ----------
-app.get('/api/reviews', requireAuth, (req, res) => {
+app.get('/api/reviews', requireAuth, requireBusiness, (req, res) => {
   res.json(db.load().reviews.filter((r) => r.businessId === req.business.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
 });
 
-app.post('/api/reviews/reply', requireAuth, async (req, res) => {
+app.post('/api/reviews/reply', requireAuth, requireBusiness, requirePlan('ai'), async (req, res) => {
   const { author, rating, text, tone, signature } = req.body || {};
   if (!text && !rating) return res.status(400).json({ error: 'Avis requis' });
   try {
@@ -291,11 +361,90 @@ app.post('/api/reviews/reply', requireAuth, async (req, res) => {
   }
 });
 
+// ---------- espace agence Qlick ----------
+function businessSummary(b, data) {
+  const parts = data.participations.filter((p) => p.businessId === b.id);
+  const since = Date.now() - 30 * 864e5;
+  const owner = data.users.find((u) => u.id === b.ownerId);
+  return {
+    id: b.id, name: b.name, slug: b.slug, plan: b.plan, planLabel: planOf(b).label, active: b.active !== false,
+    createdAt: b.createdAt, ownerEmail: owner?.email, notes: b.notes || '', configured: !!(b.googleReviewUrl || b.instagramUrl),
+    participations: parts.length, last30: parts.filter((p) => new Date(p.createdAt).getTime() > since).length,
+    googleReviews: parts.filter((p) => p.action === 'google').length,
+    lastActivity: parts.reduce((m, p) => (p.createdAt > m ? p.createdAt : m), ''),
+    playUrl: `${BASE_URL}/play/${b.slug}`,
+  };
+}
+
+app.get('/api/admin/clients', requireAuth, requireAdmin, (req, res) => {
+  const data = db.load();
+  res.json({ plans: PLANS, clients: data.businesses.map((b) => businessSummary(b, data)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)) });
+});
+
+function tempPassword() {
+  const a = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 12 }, () => a[crypto.randomInt(a.length)]).join('');
+}
+
+app.post('/api/admin/clients', requireAuth, requireAdmin, (req, res) => {
+  const { businessName, email, plan, notes } = req.body || {};
+  if (!businessName || !email) return res.status(400).json({ error: 'Nom de l\'établissement et email requis' });
+  const e = String(email).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return res.status(400).json({ error: 'Email invalide' });
+  const data = db.load();
+  if (data.users.some((u) => u.email === e)) return res.status(409).json({ error: 'Un compte existe déjà avec cet email' });
+  const password = tempPassword();
+  const user = { id: uid(), email: e, password: hashPassword(password), createdAt: now(), createdBy: req.user.email };
+  data.users.push(user);
+  const b = createBusinessFor(user, String(businessName).trim().slice(0, 80));
+  if (PLANS[plan]) b.plan = plan;
+  b.notes = String(notes || '').slice(0, 1000);
+  db.save();
+  res.json({ client: businessSummary(b, data), credentials: { email: e, password, loginUrl: `${BASE_URL}/login` } });
+});
+
+app.put('/api/admin/clients/:id', requireAuth, requireAdmin, (req, res) => {
+  const data = db.load();
+  const b = data.businesses.find((x) => x.id === req.params.id);
+  if (!b) return res.status(404).json({ error: 'Client introuvable' });
+  if ('plan' in req.body && PLANS[req.body.plan]) b.plan = req.body.plan;
+  if ('active' in req.body) b.active = !!req.body.active;
+  if ('notes' in req.body) b.notes = String(req.body.notes).slice(0, 1000);
+  db.save();
+  res.json(businessSummary(b, data));
+});
+
+app.post('/api/admin/clients/:id/reset-password', requireAuth, requireAdmin, (req, res) => {
+  const data = db.load();
+  const b = data.businesses.find((x) => x.id === req.params.id);
+  const owner = b && data.users.find((u) => u.id === b.ownerId);
+  if (!owner) return res.status(404).json({ error: 'Client introuvable' });
+  const password = tempPassword();
+  owner.password = hashPassword(password);
+  db.save();
+  res.json({ credentials: { email: owner.email, password, loginUrl: `${BASE_URL}/login` } });
+});
+
+// « se connecter en tant que » : l'admin ouvre l'espace du client pour le configurer
+app.post('/api/admin/clients/:id/impersonate', requireAuth, requireAdmin, (req, res) => {
+  const b = db.load().businesses.find((x) => x.id === req.params.id);
+  if (!b) return res.status(404).json({ error: 'Client introuvable' });
+  startSession(res, { uid: b.ownerId, as: req.user.id });
+  res.json({ ok: true, redirect: '/dashboard' });
+});
+app.post('/api/admin/stop-impersonate', requireAuth, (req, res) => {
+  if (!req.session.as) return res.status(400).json({ error: 'Pas en mode « connecté en tant que »' });
+  const admin = db.load().users.find((u) => u.id === req.session.as && u.role === 'admin');
+  if (!admin) return res.status(403).json({ error: 'Session invalide' });
+  startSession(res, { uid: req.session.as });
+  res.json({ ok: true, redirect: '/admin' });
+});
+
 // ---------- API publique (côté client final) ----------
 function publicBusiness(slug) {
   const data = db.load();
   const b = data.businesses.find((x) => x.slug === slug);
-  if (!b) return null;
+  if (!b || b.active === false) return null;
   const prizes = data.prizes.filter((p) => p.businessId === b.id && p.active);
   return { b, prizes };
 }
@@ -306,6 +455,8 @@ app.get('/api/public/:slug', (req, res) => {
   const { b, prizes } = r;
   res.json({
     name: b.name, primaryColor: b.primaryColor, welcomeText: b.welcomeText,
+    logoUrl: b.logo ? `/logo/${b.slug}?v=${b.logo.length}` : null,
+    winText: b.winText || 'Félicitations !', loseText: b.loseText || '',
     googleReviewUrl: b.googleReviewUrl, instagramUrl: b.instagramUrl, actions: b.actions, collectPhone: b.collectPhone,
     // les poids (probabilités) ne sont jamais exposés au client
     segments: prizes.map((p) => ({ id: p.id, label: p.label, color: p.color })),
@@ -390,6 +541,48 @@ app.get('/api/public/coupon/:code/qrcode.png', async (req, res) => {
 });
 
 // ---------- pages ----------
+app.get('/logo/:slug', (req, res) => {
+  const b = db.load().businesses.find((x) => x.slug === req.params.slug);
+  const m = b?.logo?.match(/^data:(image\/(?:png|jpeg|webp));base64,(.+)$/);
+  if (!m) return res.status(404).end();
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.type(m[1]).send(Buffer.from(m[2], 'base64'));
+});
+
+// règlement du jeu : texte du commerçant ou modèle généré
+function defaultRules(b, prizes) {
+  const lots = prizes.filter((p) => p.kind === 'win').map((p) => `- ${p.label}`).join('\n') || '- (aucun lot gagnant configuré)';
+  return `Article 1 – Organisateur
+Le jeu « Roue de la fortune » est organisé par ${b.name} (ci-après « l'Organisateur »).
+
+Article 2 – Participation
+Le jeu est gratuit et sans obligation d'achat. Il est ouvert à toute personne physique majeure. La participation est limitée à une par personne (même adresse email ou même appareil) sur une période de ${b.cooldownDays} jours.
+La participation n'est en aucun cas conditionnée au contenu ou à la note d'un éventuel avis : tous les participants jouent avec les mêmes chances.
+
+Article 3 – Lots
+Les lots mis en jeu sont :
+${lots}
+Les lots sont soumis à disponibilité. Ils ne sont ni échangeables, ni remboursables, ni convertibles en espèces.
+
+Article 4 – Utilisation des gains
+Le bon cadeau est valable ${b.couponValidityDays} jours à compter de la participation${b.minDelayHours ? `, à partir de ${b.minDelayHours} heure(s) après la participation` : ''}, sur présentation du code dans l'établissement. Il est à usage unique.
+
+Article 5 – Données personnelles
+Les données collectées (prénom, email${b.collectPhone ? ', téléphone' : ''}) sont utilisées pour gérer la participation et, uniquement avec votre accord, pour vous adresser des offres de l'Organisateur. Elles sont conservées 3 ans maximum à compter du dernier contact. Vous pouvez exercer vos droits d'accès, de rectification et de suppression en contactant l'Organisateur. La plateforme technique est fournie par Qlick (5 rue Fénelon, 33000 Bordeaux), qui agit en tant que sous-traitant.
+
+Article 6 – Acceptation
+La participation implique l'acceptation pleine et entière du présent règlement.`;
+}
+app.get('/api/public/:slug/rules', (req, res) => {
+  const r = publicBusiness(req.params.slug);
+  if (!r) return res.status(404).json({ error: 'Commerce introuvable' });
+  res.json({ name: r.b.name, primaryColor: r.b.primaryColor, rules: r.b.rulesText?.trim() || defaultRules(r.b, r.prizes) });
+});
+app.get('/api/rules-template', requireAuth, requireBusiness, (req, res) => {
+  res.json({ rules: defaultRules(req.business, db.load().prizes.filter((p) => p.businessId === req.business.id && p.active)) });
+});
+app.get('/play/:slug/reglement', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reglement.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/play/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'play.html')));
 app.get('/coupon/:code', (req, res) => res.sendFile(path.join(__dirname, 'public', 'coupon.html')));
 
@@ -397,6 +590,7 @@ process.on('SIGINT', () => { db.flush(); process.exit(0); });
 process.on('SIGTERM', () => { db.flush(); process.exit(0); });
 
 if (require.main === module) {
+  ensureAdmin();
   if (DEMO) require('./seed').seedDemo();
   app.listen(PORT, () => console.log(`Qlick Boost démarré sur ${BASE_URL}${PROD ? ' (production)' : ''}`));
 }

@@ -9,7 +9,16 @@ Solution SaaS de l'agence **[Qlick](https://qlick.fr)** (Bordeaux & La Réunion)
 4. Il tourne la roue. Le tirage est fait **côté serveur** (probabilités et stocks invisibles pour le client).
 5. S'il gagne, il reçoit un bon cadeau avec un code unique et un QR code (`/coupon/QLK-XXXXXX`).
 
+## Espace agence Qlick (`/admin`)
+- Liste des clients avec leurs participations, avis générés et dernière activité
+- Création d'un espace client et du message de bienvenue avec mot de passe provisoire
+- Choix de l'offre (Essai, Essentiel, Pro, Réseau), notes internes, suspension et réactivation
+- **Ouvrir l'espace** d'un client pour le configurer à sa place
+
+En local : `admin@qlick.fr` / `admin1234`. En production, le compte est défini par `QLICK_ADMIN_EMAIL` et `QLICK_ADMIN_PASSWORD`.
+
 ## Espace commerçant (`/dashboard`)
+- **Personnalisation** : logo, couleur, textes, règlement du jeu (modèle généré automatiquement), aperçu en direct
 - **Vue d'ensemble** : participations, avis générés, contacts, taux de retour, graphique sur 30 jours.
 - **Ma roue** : lots, couleurs, poids (probabilités), stocks, gagnant/perdant, aperçu en direct.
 - **Paramètres** : lien d'avis Google, Instagram, couleur, délai entre deux participations, validité du bon, délai avant utilisation.
