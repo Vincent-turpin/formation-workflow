@@ -112,6 +112,11 @@
         <p class="muted" style="font-size:13px;margin:6px 0 0">Dans Google Business Profile : « Demander des avis » → copiez le lien.</p>
         <label class="check" style="margin-top:16px"><input type="checkbox" name="act_instagram"> Abonnement Instagram</label>
         <label>Lien Instagram</label><input name="instagramUrl" placeholder="https://instagram.com/votrecompte">
+        <label class="check" style="margin-top:16px"><input type="checkbox" name="act_tiktok"> Abonnement TikTok</label>
+        <label>Lien TikTok</label><input name="tiktokUrl" placeholder="https://www.tiktok.com/@votrecompte">
+        <label class="check" style="margin-top:16px"><input type="checkbox" name="act_facebook"> Page Facebook</label>
+        <label>Lien Facebook</label><input name="facebookUrl" placeholder="https://www.facebook.com/votrepage">
+        <p class="muted" style="font-size:13px;margin:10px 0 0">💡 Si plusieurs actions sont actives, la roue suggère la suivante à chaque visite (1re visite : Google, 2e : Instagram…). Le client peut toujours choisir.</p>
         <label class="check" style="margin-top:16px"><input type="checkbox" name="act_none"> Participation sans action (recommandé pour respecter les règles Google)</label>
         <h3 style="margin-top:28px">Règles du jeu</h3>
         <div class="grid g3">
@@ -188,6 +193,7 @@
           <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
             <a class="btn small" id="qrDl" download="qlick-qrcode.png">Télécharger le PNG HD</a>
             <button class="btn ghost small" id="printKit">Imprimer le chevalet</button>
+            <a class="btn ghost small" id="flyerLink" target="_blank">Flyer A5 ↗</a>
           </div>
         </div>
         <div class="card">
@@ -211,6 +217,15 @@
         <form id="redeemForm"><input name="code" placeholder="QLK-XXXXXX" required autocomplete="off">
           <button class="btn" style="width:100%;margin-top:12px">Vérifier</button></form>
         <div id="redeemRes" style="margin-top:16px"></div>
+      </div>
+      <div class="card redeem-box" style="margin-top:20px">
+        <h3>Page caisse pour votre personnel</h3>
+        <p class="muted" style="margin-top:0">Votre équipe valide les gains sans accès à votre compte : ouvrez ce lien sur la tablette ou le téléphone de caisse, ajoutez-le aux favoris et donnez-lui le code PIN.</p>
+        <p><a id="staffLink" target="_blank" style="word-break:break-all"></a></p>
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <span class="muted">Code PIN :</span><b id="staffPin" style="font:700 22px var(--display);letter-spacing:.15em"></b>
+          <button class="btn ghost small" id="newPin" type="button">Changer le PIN</button>
+        </div>
       </div>
     </section>
 
@@ -286,6 +301,9 @@ async function init() {
   $('#me').textContent = me.email;
   $('#openPlay').href = me.playUrl;
   $('#playUrl').textContent = me.playUrl;
+  $('#flyerLink').href = `/flyer/${me.business.slug}`;
+  const staffUrl = `${location.origin}/caisse/${me.business.slug}`;
+  $('#staffLink').href = staffUrl; $('#staffLink').textContent = staffUrl; $('#staffPin').textContent = me.business.staffPin;
   $('#qrImg').src = $('#qrDl').href = '/api/qrcode.png?size=1200&t=' + Date.now();
   document.documentElement.style.setProperty('--brand', me.business.primaryColor);
   loadStats();
@@ -305,7 +323,7 @@ async function loadStats() {
     `<div style="margin:10px 0"><div style="display:flex;justify-content:space-between;font-size:14px"><span>${esc(k)}</span><b>${v}</b></div><div class="bar"><i style="width:${(v / total) * 100}%"></i></div></div>`).join('') || '<p class="muted">Aucune participation pour l\'instant.</p>';
   const b = me.business;
   const steps = [
-    [!!b.googleReviewUrl || !!b.instagramUrl, 'Renseigner votre lien d\'avis Google ou Instagram', 'settings'],
+    [!!(b.googleReviewUrl || b.instagramUrl || b.tiktokUrl || b.facebookUrl), 'Renseigner votre lien d\'avis Google ou un réseau social', 'settings'],
     [!!b.logo, 'Ajouter votre logo et vos couleurs', 'brand'],
     [true, 'Personnaliser les lots de votre roue', 'wheel'],
     [s.totalParticipations > 0, 'Imprimer et afficher votre QR code', 'qr'],
@@ -355,25 +373,32 @@ function updatePreview() {
 // ----- paramètres -----
 function fillSettings() {
   const f = $('#settingsForm'), b = me.business;
-  for (const k of ['googleReviewUrl', 'instagramUrl', 'cooldownDays', 'couponValidityDays', 'minDelayHours']) f[k].value = b[k] ?? '';
+  for (const k of ['googleReviewUrl', 'instagramUrl', 'tiktokUrl', 'facebookUrl', 'cooldownDays', 'couponValidityDays', 'minDelayHours']) f[k].value = b[k] ?? '';
   f.collectPhone.checked = !!b.collectPhone;
-  f.act_google.checked = b.actions.google; f.act_instagram.checked = b.actions.instagram; f.act_none.checked = b.actions.none;
+  f.act_google.checked = b.actions.google; f.act_instagram.checked = b.actions.instagram; f.act_tiktok.checked = !!b.actions.tiktok; f.act_facebook.checked = !!b.actions.facebook; f.act_none.checked = b.actions.none;
 }
 $('#settingsForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target;
   const body = {
-    googleReviewUrl: f.googleReviewUrl.value.trim(), instagramUrl: f.instagramUrl.value.trim(),
+    googleReviewUrl: f.googleReviewUrl.value.trim(), instagramUrl: f.instagramUrl.value.trim(), tiktokUrl: f.tiktokUrl.value.trim(), facebookUrl: f.facebookUrl.value.trim(),
     cooldownDays: f.cooldownDays.value, couponValidityDays: f.couponValidityDays.value, minDelayHours: f.minDelayHours.value,
     collectPhone: f.collectPhone.checked,
-    actions: { google: f.act_google.checked, instagram: f.act_instagram.checked, none: f.act_none.checked },
+    actions: { google: f.act_google.checked, instagram: f.act_instagram.checked, tiktok: f.act_tiktok.checked, facebook: f.act_facebook.checked, none: f.act_none.checked },
   };
-  if (!body.actions.google && !body.actions.instagram && !body.actions.none) return ($('#setErr').textContent = 'Activez au moins une action.');
+  if (!Object.values(body.actions).some(Boolean)) return ($('#setErr').textContent = 'Activez au moins une action.');
   if (body.actions.google && !body.googleReviewUrl) return ($('#setErr').textContent = 'Renseignez le lien d\'avis Google.');
   if (body.actions.instagram && !body.instagramUrl) return ($('#setErr').textContent = 'Renseignez le lien Instagram.');
+  if (body.actions.tiktok && !body.tiktokUrl) return ($('#setErr').textContent = 'Renseignez le lien TikTok.');
+  if (body.actions.facebook && !body.facebookUrl) return ($('#setErr').textContent = 'Renseignez le lien Facebook.');
   $('#setErr').textContent = '';
   try { me.business = await api('/api/business', { method: 'PUT', body }); toast('Paramètres enregistrés ✅'); }
   catch (err) { $('#setErr').textContent = err.message; }
+};
+$('#newPin').onclick = async () => {
+  if (!confirm('Générer un nouveau code PIN ? L\'ancien ne fonctionnera plus sur la page caisse.')) return;
+  const r = await api('/api/business/staff-pin', { method: 'POST' });
+  me.business.staffPin = r.staffPin; $('#staffPin').textContent = r.staffPin; toast('Nouveau PIN : ' + r.staffPin);
 };
 $('#pwdForm').onsubmit = async (e) => {
   e.preventDefault();

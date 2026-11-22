@@ -14,7 +14,8 @@
     .step.active { display: block; animation: fade .35s ease; }
     @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
     .action { display: flex; align-items: center; gap: 14px; width: 100%; text-align: left; padding: 16px; margin: 10px 0; border-radius: 14px; border: 2px solid var(--line); background: #fff; cursor: pointer; font: inherit; color: inherit; }
-    .action:hover { border-color: var(--brand); }
+    .action:hover, .action.suggested { border-color: var(--brand); }
+    .action.suggested { box-shadow: 0 10px 30px -14px var(--brand); }
     .action .ic { font-size: 30px; }
     .action b { display: block; }
     canvas { width: min(88vw, 380px); height: min(88vw, 380px); }
@@ -39,6 +40,8 @@
     <p style="font-weight:700;margin-top:24px">Pour jouer, choisissez une action :</p>
     <button class="action" data-action="google" hidden><span class="ic">⭐</span><span><b>Laisser un avis Google</b><small class="muted">Votre avis sincère, quelle que soit la note</small></span></button>
     <button class="action" data-action="instagram" hidden><span class="ic">📸</span><span><b>Suivre notre Instagram</b><small class="muted">Restez informé de nos nouveautés</small></span></button>
+    <button class="action" data-action="tiktok" hidden><span class="ic">🎵</span><span><b>Nous suivre sur TikTok</b><small class="muted">Nos coulisses en vidéo</small></span></button>
+    <button class="action" data-action="facebook" hidden><span class="ic">👍</span><span><b>Aimer notre page Facebook</b><small class="muted">Actus et bons plans</small></span></button>
     <button class="action" data-action="none" hidden><span class="ic">🎁</span><span><b>Jouer directement</b><small class="muted">Sans action requise</small></span></button>
   </section>
 
@@ -105,10 +108,17 @@ async function init() {
   document.getElementById('rulesLink').href = `/play/${slug}/reglement`;
   document.querySelectorAll('.action').forEach((b) => {
     const a = b.dataset.action;
-    const ok = cfg.actions[a] && (a === 'none' || (a === 'google' ? cfg.googleReviewUrl : cfg.instagramUrl));
+    const ok = a === 'none' ? cfg.actions.none : !!cfg.actionUrls[a];
     b.hidden = !ok;
     b.onclick = () => choose(a);
   });
+  // action suggérée pour cette visite : affichée en premier et mise en avant
+  const sug = cfg.suggestedAction && document.querySelector(`.action[data-action="${cfg.suggestedAction}"]`);
+  if (sug) {
+    sug.classList.add('suggested');
+    sug.querySelector('b').insertAdjacentHTML('beforeend', ' <span class="badge" style="margin-left:6px">Recommandé</span>');
+    sug.parentNode.insertBefore(sug, document.querySelector('.action'));
+  }
   if (![...document.querySelectorAll('.action')].some((b) => !b.hidden)) {
     document.querySelector('#s-action p[style]').textContent = 'Le jeu est en cours de configuration. Revenez très bientôt !';
   }
@@ -119,10 +129,13 @@ async function init() {
 function choose(action) {
   chosenAction = action;
   if (action === 'none') return show('s-form');
-  const url = action === 'google' ? cfg.googleReviewUrl : cfg.instagramUrl;
-  document.getElementById('back-text').textContent = action === 'google'
-    ? 'Une fois votre avis publié sur Google, revenez ici pour tourner la roue.'
-    : 'Une fois abonné(e) à notre compte Instagram, revenez ici pour tourner la roue.';
+  const url = cfg.actionUrls[action];
+  document.getElementById('back-text').textContent = {
+    google: 'Une fois votre avis publié sur Google, revenez ici pour tourner la roue.',
+    instagram: 'Une fois abonné(e) à notre compte Instagram, revenez ici pour tourner la roue.',
+    tiktok: 'Une fois abonné(e) à notre compte TikTok, revenez ici pour tourner la roue.',
+    facebook: 'Une fois notre page Facebook aimée, revenez ici pour tourner la roue.',
+  }[action];
   document.getElementById('btn-reopen').onclick = (e) => { e.preventDefault(); window.open(url, '_blank'); };
   window.open(url, '_blank');
   // on laisse un petit délai pour éviter le clic immédiat

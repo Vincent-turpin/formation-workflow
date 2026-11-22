@@ -4,12 +4,12 @@ Ce guide met Qlick Boost en ligne sur une adresse du type **https://boost.qlick.
 
 Deux options :
 
-| | **A. Render** (recommandé pour démarrer) | **B. Serveur VPS + Docker** |
+| | **A. Render** | **B. Votre VPS IONOS + Docker** (recommandé si vous l'avez déjà) |
 |---|---|---|
 | Difficulté | Aucune ligne de commande | Notions de serveur Linux |
 | Coût indicatif | Environ 7 $/mois (offre Starter + disque) | 5 à 10 €/mois (OVH, Hostinger, Scaleway…) |
 | HTTPS, redémarrage, déploiement à chaque `git push` | Automatiques | À configurer (Caddy, voir plus bas) |
-| Sauvegardes du disque | Instantanés automatiques de Render | À mettre en place vous-même |
+| Sauvegardes | Instantanés Render + sauvegarde quotidienne de l'app | Sauvegarde quotidienne de l'app (30 jours) |
 
 Les tarifs changent souvent : vérifiez-les sur le site de l'hébergeur avant de vous engager.
 
@@ -63,44 +63,62 @@ Chaque `git push` sur la branche suivie redéploie l'application. Les données d
 
 ---
 
-## Option B : VPS avec Docker
+## Option B : votre VPS IONOS (Docker + HTTPS automatique)
 
-Ces étapes conviennent à un VPS Ubuntu 22.04 ou 24.04.
+Ces étapes conviennent à un VPS Ubuntu 22.04 ou 24.04. Remplacez `IP_DU_VPS` par l'adresse IP de votre serveur, indiquée dans IONOS → Serveurs & Cloud.
 
+### 1. DNS
+Dans IONOS → **Domaines & SSL** → `qlick.fr` → **DNS**, ajoutez un enregistrement **A** : nom `boost`, valeur `IP_DU_VPS`.
+
+### 2. Pare-feu IONOS
+Dans IONOS → **Réseau** → **Stratégies de pare-feu**, autorisez en entrée les ports **80** et **443** (TCP).
+
+### 3. Se connecter au serveur et installer Docker (si absent)
 ```bash
-# 1. Installer Docker
+ssh root@IP_DU_VPS
+```
+```bash
 curl -fsSL https://get.docker.com | sh
-
-# 2. Récupérer le code
-git clone https://github.com/vincent-turpin/formation-workflow.git
-cd formation-workflow/qlick-boost
-
-# 3. Créer le fichier de configuration
-cp .env.example .env
-nano .env            # renseignez BASE_URL, QLICK_SECRET (openssl rand -hex 32), ANTHROPIC_API_KEY…
-
-# 4. Construire et lancer
-docker build -t qlick-boost .
-docker run -d --name qlick-boost --restart unless-stopped \
-  --env-file .env -v qlick-data:/data -p 127.0.0.1:3000:3000 qlick-boost
 ```
 
-Pour le HTTPS, installez **Caddy**, qui gère les certificats tout seul (`apt install caddy`). Mettez ces lignes dans `/etc/caddy/Caddyfile` :
-```
-boost.qlick.fr {
-    reverse_proxy 127.0.0.1:3000
-}
-```
-Puis lancez `systemctl reload caddy`. Côté DNS, créez un enregistrement **A** `boost` qui pointe vers l'adresse IP du VPS.
-
-Pour mettre à jour :
+### 4. Vérifier que les ports 80 et 443 sont libres
 ```bash
-git pull && docker build -t qlick-boost . && docker rm -f qlick-boost && docker run -d --name qlick-boost --restart unless-stopped --env-file .env -v qlick-data:/data -p 127.0.0.1:3000:3000 qlick-boost
+ss -tlnp | grep -E ':80 |:443 '; docker ps
+```
+Si un autre site (ou n8n) utilise déjà ces ports, **ne lancez pas le service `caddy`**. Supprimez-le de `docker-compose.yml` et ajoutez `boost.qlick.fr` → `127.0.0.1:3000` à votre proxy existant. Exposez alors le port de l'app avec `ports: ["127.0.0.1:3000:3000"]`.
+
+### 5. Récupérer le code et configurer
+```bash
+git clone -b claude/lucid-ptolemy-nn7a0w https://github.com/vincent-turpin/formation-workflow.git /opt/formation-workflow
+```
+```bash
+cd /opt/formation-workflow/qlick-boost && cp .env.example .env && sed -i "s/^QLICK_SECRET=.*/QLICK_SECRET=$(openssl rand -hex 32)/" .env
+```
+```bash
+nano .env
+```
+Dans `.env`, renseignez au minimum `BASE_URL=https://boost.qlick.fr`, `QLICK_ADMIN_EMAIL`, `QLICK_ADMIN_PASSWORD` et, si vous voulez l'IA, `ANTHROPIC_API_KEY`. Mettez `QLICK_DB=/data/db.json`.
+
+> Le dépôt est privé ? `git clone` vous demandera un jeton GitHub. Autre solution : depuis votre Mac, `scp -r qlick-boost root@IP_DU_VPS:/opt/`.
+
+### 6. Lancer
+```bash
+mkdir -p data && chown 1000:1000 data && docker compose up -d --build
+```
+```bash
+docker compose logs -f app
+```
+Ouvrez https://boost.qlick.fr/admin. Le certificat HTTPS arrive tout seul, en une minute environ. Faites **Ctrl + C** pour quitter les journaux.
+
+### Mettre à jour
+```bash
+cd /opt/formation-workflow && git pull && cd qlick-boost && docker compose up -d --build
 ```
 
-Pour sauvegarder chaque nuit, ajoutez cette ligne avec `crontab -e` :
-```
-0 3 * * * docker cp qlick-boost:/data/db.json /root/backups/qlick-$(date +\%F).json
+### Sauvegardes
+L'application enregistre chaque jour une copie de la base dans `data/backups/` et garde les 30 dernières. Pour une copie hors serveur, rapatriez ce dossier sur votre Mac de temps en temps :
+```bash
+scp -r root@IP_DU_VPS:/opt/formation-workflow/qlick-boost/data/backups ~/qlick-backups
 ```
 
 ---
@@ -119,7 +137,8 @@ Pour sauvegarder chaque nuit, ajoutez cette ligne avec `crontab -e` :
    - **Personnalisation** : logo, couleur, message d'accueil, textes de gain et de perte, règlement (bouton **Partir du modèle**). L'aperçu est en direct.
    - **Paramètres** : lien d'avis Google (Google Business Profile → « Demander des avis ») et lien Instagram.
    - **Ma roue** : les lots et leurs probabilités.
-   - **QR code** : imprimez le chevalet ou envoyez le PNG au client.
+   - **QR code** : imprimez le chevalet ou le **flyer A5**, ou envoyez le PNG au client.
+   - **Valider un gain** : notez le lien de la **page caisse** et son **code PIN** pour le personnel du client.
 4. Cliquez sur **Revenir à l'espace agence**. Le client passe en statut **Actif** dès qu'un lien d'avis ou Instagram est renseigné.
 
 ### Offres
@@ -160,7 +179,7 @@ Vous changez l'offre d'un client directement dans la liste. **Suspendre** coupe 
 **Technique**
 - [ ] `https://boost.qlick.fr/healthz` répond `{"ok":true}`
 - [ ] Se connecter à `/admin` avec le compte agence
-- [ ] Créer un client de test, le configurer via « Ouvrir l'espace », scanner son QR code avec un téléphone, jouer, puis valider le bon en caisse
+- [ ] Créer un client de test, le configurer via « Ouvrir l'espace », scanner son QR code avec un téléphone, jouer, puis valider le bon sur la page caisse avec le PIN
 - [ ] Mettre en place une surveillance gratuite de `/healthz` (UptimeRobot ou Better Stack), avec alerte par email
 - [ ] Vérifier que les sauvegardes fonctionnent : sur Render, onglet **Disks → Snapshots**
 

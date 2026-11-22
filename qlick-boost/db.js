@@ -32,4 +32,14 @@ function flush() {
   fs.renameSync(tmp, DB_FILE);
 }
 
-module.exports = { load, save, flush, DB_FILE };
+// sauvegarde quotidienne, 30 jours conservés (data/backups/db-AAAA-MM-JJ.json)
+function backup() {
+  if (!state) load();
+  const dir = path.join(path.dirname(DB_FILE), 'backups');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `db-${new Date().toISOString().slice(0, 10)}.json`), JSON.stringify(state));
+  const files = fs.readdirSync(dir).filter((f) => f.startsWith('db-')).sort();
+  while (files.length > 30) fs.unlinkSync(path.join(dir, files.shift()));
+}
+
+module.exports = { load, save, flush, backup, DB_FILE };

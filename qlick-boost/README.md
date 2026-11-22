@@ -19,6 +19,9 @@ En local : `admin@qlick.fr` / `admin1234`. En production, le compte est défini 
 
 ## Espace commerçant (`/dashboard`)
 - **Personnalisation** : logo, couleur, textes, règlement du jeu (modèle généré automatiquement), aperçu en direct
+- **Actions** : avis Google, Instagram, TikTok, Facebook ou participation libre. La roue suggère une action différente à chaque visite.
+- **Page caisse** `/caisse/<commerce>` : le personnel valide les gains avec un code PIN, sans accès au compte (8 essais max par 15 min)
+- **Flyer A5** `/flyer/<commerce>` et **QR code public** `/qr/<commerce>.png`
 - **Vue d'ensemble** : participations, avis générés, contacts, taux de retour, graphique sur 30 jours.
 - **Ma roue** : lots, couleurs, poids (probabilités), stocks, gagnant/perdant, aperçu en direct.
 - **Paramètres** : lien d'avis Google, Instagram, couleur, délai entre deux participations, validité du bon, délai avant utilisation.
@@ -26,6 +29,11 @@ En local : `admin@qlick.fr` / `admin1234`. En production, le compte est défini 
 - **Valider un gain** : vérification du code en caisse et utilisation unique.
 - **Clients** : liste des participants, recherche et export CSV (compatible Excel).
 - **Réponses IA** : réponse personnalisée à un avis Google, générée par Claude. Sans clé API, un modèle de réponse local est utilisé.
+
+## Tests
+```bash
+npm test   # parcours complet : agence → client → joueur → caisse
+```
 
 ## Lancer le projet
 ```bash
@@ -45,7 +53,7 @@ Les variables d'environnement (production, IA, démo, code d'invitation) et la m
 - `public/` : site vitrine, jeu client, bon cadeau, connexion, tableau de bord (HTML/CSS/JS sans framework)
 
 ## Mise en production
-Voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)** : Render (fichier `render.yaml` à la racine du dépôt) ou VPS avec le `Dockerfile`.
+Voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)** : VPS IONOS avec `docker-compose.yml` + `Caddyfile` (HTTPS automatique), ou Render (`render.yaml` à la racine du dépôt). Sauvegarde quotidienne automatique dans `data/backups/` (30 jours).
 
 ## Prochaines étapes
 - Base PostgreSQL et hébergement (Render, Railway, Fly.io)

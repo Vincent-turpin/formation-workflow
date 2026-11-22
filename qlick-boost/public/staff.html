@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Caisse — Qlick Boost</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <style>
+    main { max-width: 460px; margin: 0 auto; padding: 28px 18px 40px; text-align: center; }
+    .head img { max-height: 64px; max-width: 180px; object-fit: contain; margin: 0 auto 10px; display: block; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .big { font: 700 28px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .14em; text-align: center; text-transform: uppercase; padding: 16px; }
+    .pin { letter-spacing: .5em; }
+    .res { margin-top: 18px; text-align: left; }
+    .res h2 { font-size: 1.4rem; margin: 8px 0 6px; }
+    .state { display: inline-block; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: 14px; }
+    .state.ok { background: #D1FAE5; color: #047857; }
+    .state.ko { background: #FEE2E2; color: #B91C1C; }
+    .state.warn { background: #FEF3C7; color: #92400E; }
+    .btn.full { width: 100%; margin-top: 12px; min-height: 54px; font-size: 16px; }
+    .foot { margin-top: 26px; font-size: 13px; }
+  </style>
+</head>
+<body class="light">
+<main>
+  <div class="head">
+    <img id="logo" alt="" hidden>
+    <h1 id="name">Caisse</h1>
+    <p class="muted" style="margin:0">Validation des bons cadeaux</p>
+  </div>
+
+  <form id="pinForm" class="card" style="margin-top:22px">
+    <label for="pin">Code PIN de la caisse</label>
+    <input id="pin" class="big pin" inputmode="numeric" autocomplete="off" maxlength="6" required>
+    <p class="error" id="pinErr"></p>
+    <button class="btn full">Ouvrir la caisse</button>
+  </form>
+
+  <section id="desk" hidden>
+    <form id="codeForm" class="card" style="margin-top:22px">
+      <label for="code">Code présenté par le client</label>
+      <input id="code" class="big" placeholder="QLK-XXXXXX" autocomplete="off" autocapitalize="characters" required>
+      <button class="btn full">Vérifier le code</button>
+    </form>
+    <div id="res" class="res"></div>
+    <p class="foot"><a href="#" id="lock">Verrouiller la caisse</a></p>
+  </section>
+</main>
+<script>
+const slug = location.pathname.split('/').pop();
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (s) => new Date(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+let pin = sessionStorage.getItem('qb_pin_' + slug) || '';
+
+async function call(path, body) {
+  const res = await fetch(`/api/staff/${encodeURIComponent(slug)}/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin, ...body }) });
+  return { status: res.status, data: await res.json() };
+}
+
+async function login() {
+  const { status, data } = await call('login');
+  if (status !== 200) { sessionStorage.removeItem('qb_pin_' + slug); $('#pinErr').textContent = data.error; return; }
+  sessionStorage.setItem('qb_pin_' + slug, pin);
+  document.documentElement.style.setProperty('--brand', data.primaryColor);
+  $('#name').textContent = data.name; document.title = `Caisse — ${data.name}`;
+  if (data.logoUrl) { $('#logo').src = data.logoUrl; $('#logo').hidden = false; }
+  $('#pinForm').hidden = true; $('#desk').hidden = false; $('#code').focus();
+}
+$('#pinForm').onsubmit = (e) => { e.preventDefault(); pin = $('#pin').value.trim(); login(); };
+$('#lock').onclick = (e) => { e.preventDefault(); sessionStorage.removeItem('qb_pin_' + slug); location.reload(); };
+
+function render(p, state, msg, canRedeem) {
+  $('#res').innerHTML = `<div class="card">
+    <span class="state ${state}">${esc(msg)}</span>
+    <h2>${esc(p.label)}</h2>
+    <p class="muted" style="margin:0">Pour <b>${esc(p.firstName)}</b> · code <code>${esc(p.code)}</code><br>
+    Gagné le ${fmt(p.createdAt)} · valable jusqu'au ${fmt(p.expiresAt)}${p.redeemedAt ? `<br>Utilisé le ${new Date(p.redeemedAt).toLocaleString('fr-FR')}` : ''}</p>
+    ${canRedeem ? '<button class="btn full" id="confirm">Valider et remettre le cadeau</button>' : ''}
+  </div>`;
+  if (canRedeem) $('#confirm').onclick = redeem;
+}
+
+$('#codeForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const { status, data } = await call('lookup', { code: $('#code').value });
+  if (status === 401 || status === 429) { $('#res').innerHTML = `<div class="card"><span class="state ko">${esc(data.error)}</span></div>`; return; }
+  if (status !== 200) { $('#res').innerHTML = `<div class="card"><span class="state ko">❌ ${esc(data.error)}</span></div>`; return; }
+  if (data.redeemedAt) return render(data, 'ko', '❌ Déjà utilisé', false);
+  if (new Date(data.expiresAt) < new Date()) return render(data, 'ko', '❌ Expiré', false);
+  if (data.validFrom && new Date(data.validFrom) > new Date()) return render(data, 'warn', `⏳ Utilisable à partir du ${fmt(data.validFrom)}`, false);
+  render(data, 'ok', '✅ Bon valide', true);
+};
+
+async function redeem() {
+  const { status, data } = await call('redeem', { code: $('#code').value });
+  if (status === 200) { render(data, 'ok', '🎉 Gain validé', false); $('#code').value = ''; }
+  else render(data, 'ko', `❌ ${data.error}`, false);
+}
+
+if (pin) login();
+</script>
+</body>
+</html>

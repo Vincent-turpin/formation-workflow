@@ -1,0 +1,36 @@
+# Déploiement sur un VPS (IONOS, OVH…) : application + HTTPS automatique
+#   cp .env.example .env   (puis complétez-le)
+#   docker compose up -d --build
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      QLICK_DB: /data/db.json
+    volumes:
+      - ./data:/data
+    expose:
+      - "3000"
+
+  # Caddy obtient et renouvelle le certificat HTTPS tout seul (Let's Encrypt).
+  # Si les ports 80/443 sont déjà utilisés sur le serveur (autre site, n8n…),
+  # supprimez ce service et ajoutez boost.qlick.fr à votre proxy existant (port 3000).
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

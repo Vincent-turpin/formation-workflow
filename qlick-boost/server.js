@@ -92,6 +92,12 @@ function couponCode() {
   return c;
 }
 
+// actions proposées avant de jouer (ordre = séquence suggérée visite après visite)
+const SOCIAL_ACTIONS = ['google', 'instagram', 'tiktok', 'facebook'];
+const ACTION_URL = { google: 'googleReviewUrl', instagram: 'instagramUrl', tiktok: 'tiktokUrl', facebook: 'facebookUrl' };
+const actionAvailable = (b, a) => !!b.actions?.[a] && (a === 'none' || !!b[ACTION_URL[a]]);
+const newPin = () => String(crypto.randomInt(0, 1e6)).padStart(6, '0');
+
 // fonctionnalités par offre (voir la page Tarifs)
 const PLANS = {
   trial: { label: 'Essai 14 jours', ai: true, csv: true },
@@ -116,6 +122,16 @@ function ensureAdmin() {
     data.users.push(u);
     console.log(`Administrateur Qlick créé : ${email}`);
   } else if (u.role !== 'admin') u.role = 'admin';
+  db.save();
+}
+
+function migrate() {
+  const data = db.load();
+  for (const b of data.businesses) {
+    if (!b.staffPin) b.staffPin = newPin();
+    b.actions = { google: false, instagram: false, tiktok: false, facebook: false, none: false, ...b.actions };
+    for (const k of Object.values(ACTION_URL)) b[k] ??= '';
+  }
   db.save();
 }
 
@@ -162,9 +178,9 @@ function createBusinessFor(user, name) {
   while (data.businesses.some((b) => b.slug === slug)) slug = `${slugify(name)}-${crypto.randomInt(1000, 9999)}`;
   const business = {
     id: uid(), ownerId: user.id, name, slug, createdAt: now(),
-    googleReviewUrl: '', instagramUrl: '', primaryColor: '#8B5CF6',
+    googleReviewUrl: '', instagramUrl: '', tiktokUrl: '', facebookUrl: '', primaryColor: '#8B5CF6', staffPin: newPin(),
     welcomeText: `Tentez votre chance chez ${name} !`,
-    actions: { google: true, instagram: false, none: true },
+    actions: { google: true, instagram: false, tiktok: false, facebook: false, none: true },
     cooldownDays: 30, couponValidityDays: 30, minDelayHours: 0,
     collectPhone: false, plan: 'trial', active: true,
     logo: null, winText: 'Félicitations !', loseText: 'Pas de chance cette fois… Merci pour votre participation, retentez votre chance lors de votre prochaine visite !',
@@ -225,14 +241,15 @@ app.get('/api/me', requireAuth, (req, res) => {
 });
 
 // ---------- configuration du commerce ----------
-const EDITABLE = ['name', 'googleReviewUrl', 'instagramUrl', 'primaryColor', 'welcomeText', 'cooldownDays', 'couponValidityDays', 'minDelayHours', 'collectPhone', 'actions', 'winText', 'loseText', 'rulesText'];
-const TEXT_LIMITS = { name: 80, welcomeText: 200, winText: 120, loseText: 300, rulesText: 8000, googleReviewUrl: 500, instagramUrl: 500 };
+const EDITABLE = ['name', 'googleReviewUrl', 'instagramUrl', 'tiktokUrl', 'facebookUrl', 'primaryColor', 'welcomeText', 'cooldownDays', 'couponValidityDays', 'minDelayHours', 'collectPhone', 'actions', 'winText', 'loseText', 'rulesText'];
+const TEXT_LIMITS = { name: 80, welcomeText: 200, winText: 120, loseText: 300, rulesText: 8000, googleReviewUrl: 500, instagramUrl: 500, tiktokUrl: 500, facebookUrl: 500 };
 app.put('/api/business', requireAuth, requireBusiness, (req, res) => {
   const b = req.business;
   for (const k of EDITABLE) if (k in req.body) b[k] = req.body[k];
   for (const [k, max] of Object.entries(TEXT_LIMITS)) b[k] = String(b[k] ?? '').slice(0, max);
   if (!/^#[0-9a-f]{6}$/i.test(b.primaryColor)) b.primaryColor = '#8B5CF6';
-  for (const k of ['googleReviewUrl', 'instagramUrl']) if (b[k] && !/^https:\/\//i.test(b[k])) b[k] = '';
+  for (const k of Object.values(ACTION_URL)) if (b[k] && !/^https:\/\//i.test(b[k])) b[k] = '';
+  b.actions = Object.fromEntries([...SOCIAL_ACTIONS, 'none'].map((a) => [a, !!b.actions?.[a]]));
   if ('logo' in req.body) {
     const logo = req.body.logo;
     if (logo === null) b.logo = null;
@@ -368,7 +385,7 @@ function businessSummary(b, data) {
   const owner = data.users.find((u) => u.id === b.ownerId);
   return {
     id: b.id, name: b.name, slug: b.slug, plan: b.plan, planLabel: planOf(b).label, active: b.active !== false,
-    createdAt: b.createdAt, ownerEmail: owner?.email, notes: b.notes || '', configured: !!(b.googleReviewUrl || b.instagramUrl),
+    createdAt: b.createdAt, ownerEmail: owner?.email, notes: b.notes || '', configured: SOCIAL_ACTIONS.some((a) => actionAvailable(b, a)),
     participations: parts.length, last30: parts.filter((p) => new Date(p.createdAt).getTime() > since).length,
     googleReviews: parts.filter((p) => p.action === 'google').length,
     lastActivity: parts.reduce((m, p) => (p.createdAt > m ? p.createdAt : m), ''),
@@ -453,8 +470,14 @@ app.get('/api/public/:slug', (req, res) => {
   const r = publicBusiness(req.params.slug);
   if (!r) return res.status(404).json({ error: 'Commerce introuvable' });
   const { b, prizes } = r;
+  const device = getCookie(req, 'qlick_device');
+  const visits = device ? db.load().participations.filter((p) => p.businessId === b.id && p.device === device).length : 0;
+  const social = SOCIAL_ACTIONS.filter((a) => actionAvailable(b, a));
   res.json({
     name: b.name, primaryColor: b.primaryColor, welcomeText: b.welcomeText,
+    // séquence adaptative : 1re visite → 1re action, 2e visite → 2e action…
+    suggestedAction: social.length ? social[visits % social.length] : null,
+    actionUrls: Object.fromEntries(social.map((a) => [a, b[ACTION_URL[a]]])),
     logoUrl: b.logo ? `/logo/${b.slug}?v=${b.logo.length}` : null,
     winText: b.winText || 'Félicitations !', loseText: b.loseText || '',
     googleReviewUrl: b.googleReviewUrl, instagramUrl: b.instagramUrl, actions: b.actions, collectPhone: b.collectPhone,
@@ -490,7 +513,7 @@ app.post('/api/public/:slug/spin', (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mail)) return res.status(400).json({ error: 'Email invalide' });
   if (!firstName) return res.status(400).json({ error: 'Prénom requis' });
   if (!consent) return res.status(400).json({ error: 'Veuillez accepter le règlement du jeu' });
-  if (!['google', 'instagram', 'none'].includes(action) || !b.actions[action]) return res.status(400).json({ error: 'Action non disponible' });
+  if (![...SOCIAL_ACTIONS, 'none'].includes(action) || !actionAvailable(b, action)) return res.status(400).json({ error: 'Action non disponible' });
 
   const data = db.load();
   // une participation par email / appareil sur la période de cooldown
@@ -557,7 +580,7 @@ Le jeu « Roue de la fortune » est organisé par ${b.name} (ci-après « l'Orga
 
 Article 2 – Participation
 Le jeu est gratuit et sans obligation d'achat. Il est ouvert à toute personne physique majeure. La participation est limitée à une par personne (même adresse email ou même appareil) sur une période de ${b.cooldownDays} jours.
-La participation n'est en aucun cas conditionnée au contenu ou à la note d'un éventuel avis : tous les participants jouent avec les mêmes chances.
+La participation n'est en aucun cas conditionnée au contenu ou à la note d'un éventuel avis : tous les participants jouent avec les mêmes chances.${b.actions?.none ? ' Les actions proposées (avis, abonnement à un réseau social) sont facultatives : il est possible de jouer directement.' : ''}
 
 Article 3 – Lots
 Les lots mis en jeu sont :
@@ -570,7 +593,10 @@ Le bon cadeau est valable ${b.couponValidityDays} jours à compter de la partici
 Article 5 – Données personnelles
 Les données collectées (prénom, email${b.collectPhone ? ', téléphone' : ''}) sont utilisées pour gérer la participation et, uniquement avec votre accord, pour vous adresser des offres de l'Organisateur. Elles sont conservées 3 ans maximum à compter du dernier contact. Vous pouvez exercer vos droits d'accès, de rectification et de suppression en contactant l'Organisateur. La plateforme technique est fournie par Qlick (5 rue Fénelon, 33000 Bordeaux), qui agit en tant que sous-traitant.
 
-Article 6 – Acceptation
+Article 6 – Plateformes tierces
+Google, Instagram, TikTok et Facebook ne sont ni organisateurs ni parrains du jeu.
+
+Article 7 – Acceptation
 La participation implique l'acceptation pleine et entière du présent règlement.`;
 }
 app.get('/api/public/:slug/rules', (req, res) => {
@@ -581,6 +607,96 @@ app.get('/api/public/:slug/rules', (req, res) => {
 app.get('/api/rules-template', requireAuth, requireBusiness, (req, res) => {
   res.json({ rules: defaultRules(req.business, db.load().prizes.filter((p) => p.businessId === req.business.id && p.active)) });
 });
+// ---------- caisse : le personnel valide les gains avec le code PIN du commerce ----------
+const pinAttempts = new Map();
+function staffAuth(req, res) {
+  const b = db.load().businesses.find((x) => x.slug === req.params.slug && x.active !== false);
+  if (!b) { res.status(404).json({ error: 'Commerce introuvable' }); return null; }
+  const key = `${req.ip}:${b.id}`;
+  const recent = (pinAttempts.get(key) || []).filter((t) => t > Date.now() - 15 * 60e3);
+  if (recent.length >= 8) { res.status(429).json({ error: 'Trop d\'essais, patientez 15 minutes.' }); return null; }
+  const pin = String(req.body?.pin || '');
+  const ok = b.staffPin && pin.length === b.staffPin.length && crypto.timingSafeEqual(Buffer.from(pin), Buffer.from(b.staffPin));
+  if (!ok) { pinAttempts.set(key, [...recent, Date.now()]); res.status(401).json({ error: 'Code PIN incorrect' }); return null; }
+  return b;
+}
+const staffView = (p) => ({ code: p.code, label: p.prizeLabel, firstName: p.firstName, createdAt: p.createdAt, validFrom: p.validFrom, expiresAt: p.expiresAt, redeemedAt: p.redeemedAt });
+function findCode(b, raw) {
+  const clean = String(raw || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return db.load().participations.find((p) => p.businessId === b.id && p.kind === 'win' && p.code.replace(/[^A-Z0-9]/g, '') === clean);
+}
+app.post('/api/staff/:slug/login', (req, res) => {
+  const b = staffAuth(req, res);
+  if (b) res.json({ ok: true, name: b.name, primaryColor: b.primaryColor, logoUrl: b.logo ? `/logo/${b.slug}` : null });
+});
+app.post('/api/staff/:slug/lookup', (req, res) => {
+  const b = staffAuth(req, res); if (!b) return;
+  const p = findCode(b, req.body?.code);
+  if (!p) return res.status(404).json({ error: 'Code inconnu' });
+  res.json(staffView(p));
+});
+app.post('/api/staff/:slug/redeem', (req, res) => {
+  const b = staffAuth(req, res); if (!b) return;
+  const p = findCode(b, req.body?.code);
+  if (!p) return res.status(404).json({ error: 'Code inconnu' });
+  if (p.redeemedAt) return res.status(409).json({ error: 'Gain déjà utilisé', ...staffView(p) });
+  if (new Date(p.expiresAt) < new Date()) return res.status(410).json({ error: 'Gain expiré', ...staffView(p) });
+  if (p.validFrom && new Date(p.validFrom) > new Date()) return res.status(400).json({ error: `Utilisable à partir du ${new Date(p.validFrom).toLocaleString('fr-FR')}`, ...staffView(p) });
+  p.redeemedAt = now();
+  db.save();
+  res.json(staffView(p));
+});
+app.post('/api/business/staff-pin', requireAuth, requireBusiness, (req, res) => {
+  req.business.staffPin = newPin();
+  db.save();
+  res.json({ staffPin: req.business.staffPin });
+});
+app.get('/caisse/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'staff.html')));
+
+// QR code public (sticker, chevalet, partage au commerçant)
+app.get('/qr/:slug.png', async (req, res) => {
+  const b = db.load().businesses.find((x) => x.slug === req.params.slug);
+  if (!b) return res.status(404).end();
+  const png = await QRCode.toBuffer(`${BASE_URL}/play/${b.slug}?src=qr`, { width: 800, margin: 2, color: { dark: '#110824', light: '#FFFFFF' } });
+  res.set('Content-Type', 'image/png').set('Cache-Control', 'public, max-age=3600').send(png);
+});
+
+// flyer A5 imprimable aux couleurs du commerce
+const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+app.get('/flyer/:slug', async (req, res) => {
+  const b = db.load().businesses.find((x) => x.slug === req.params.slug);
+  if (!b) return res.status(404).send('Introuvable');
+  const qr = await QRCode.toString(`${BASE_URL}/play/${b.slug}?src=flyer`, { type: 'svg', margin: 0, color: { dark: '#110824', light: '#FFFFFF' } });
+  const color = /^#[0-9a-f]{6}$/i.test(b.primaryColor) ? b.primaryColor : '#8B5CF6';
+  const host = BASE_URL.replace(/^https?:\/\//, '');
+  res.send(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Flyer — ${escHtml(b.name)}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Instrument+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+@page{size:A5;margin:0}*{box-sizing:border-box}body{margin:0;font-family:'Instrument Sans',system-ui,sans-serif;background:#ddd}
+.sheet{width:148mm;height:210mm;margin:10mm auto;background:radial-gradient(90mm 70mm at 90% 0%,${color}cc,transparent 70%),linear-gradient(170deg,#110824,#06030D);color:#F3EEFF;padding:14mm 12mm 10mm;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden}
+.logo{max-height:22mm;max-width:60mm;background:#fff;border-radius:4mm;padding:2mm}
+.name{font:500 13pt 'Unbounded',sans-serif;letter-spacing:.02em}
+h1{font:700 26pt/1.05 'Unbounded',sans-serif;margin:7mm 0 3mm;letter-spacing:-.02em}
+.sub{font-size:12pt;color:#C9B8FF}
+.qr{background:#fff;padding:5mm;border-radius:6mm;width:70mm;height:70mm;margin:7mm 0 6mm;box-shadow:0 0 0 2mm ${color}55}
+.qr svg{width:100%;height:100%;display:block}
+ol{text-align:left;font-size:11pt;margin:0;padding-left:6mm;line-height:1.6}
+.foot{margin-top:auto;font-size:7pt;color:#B3AACF}
+@media print{body{background:none}.sheet{margin:0}.noprint{display:none}}
+.noprint{text-align:center;margin:8mm}button{font:600 14px 'Instrument Sans';padding:12px 22px;border-radius:999px;border:0;background:linear-gradient(120deg,#8B5CF6,#D946EF);color:#fff;cursor:pointer}
+</style></head><body>
+<div class="noprint"><button onclick="print()">Imprimer le flyer A5</button></div>
+<div class="sheet">
+${b.logo ? `<img class="logo" src="/logo/${escHtml(b.slug)}" alt="${escHtml(b.name)}">` : `<div class="name">${escHtml(b.name)}</div>`}
+<h1>Tentez<br>votre chance&nbsp;!</h1>
+<div class="sub">Scannez, tournez la roue, gagnez un cadeau</div>
+<div class="qr">${qr}</div>
+<ol><li>Scannez le QR code avec votre téléphone</li><li>Tournez la roue</li><li>Présentez votre code en caisse</li></ol>
+<div class="foot">Jeu gratuit sans obligation d'achat — règlement : ${escHtml(host)}/play/${escHtml(b.slug)}/reglement · Propulsé par Qlick</div>
+</div></body></html>`);
+});
+
 app.get('/play/:slug/reglement', (req, res) => res.sendFile(path.join(__dirname, 'public', 'reglement.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/play/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'play.html')));
@@ -592,6 +708,8 @@ process.on('SIGTERM', () => { db.flush(); process.exit(0); });
 if (require.main === module) {
   ensureAdmin();
   if (DEMO) require('./seed').seedDemo();
+  migrate();
+  db.backup(); setInterval(() => db.backup(), 24 * 3600e3).unref();
   app.listen(PORT, () => console.log(`Qlick Boost démarré sur ${BASE_URL}${PROD ? ' (production)' : ''}`));
 }
 module.exports = app;
