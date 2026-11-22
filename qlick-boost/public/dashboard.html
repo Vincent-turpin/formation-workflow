@@ -4,31 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tableau de bord — Qlick Boost</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <style>
     .layout { display: grid; min-height: 100vh; }
     @media (min-width: 900px) { .layout { grid-template-columns: 240px 1fr; } }
-    aside { background: var(--ink); color: #fff; padding: 22px 16px; }
-    aside .logo { color: #fff; margin-bottom: 26px; }
-    aside nav button { display: flex; gap: 10px; width: 100%; text-align: left; padding: 11px 14px; border: 0; border-radius: 10px; background: transparent; color: #C7D2FE; font: inherit; font-weight: 600; cursor: pointer; margin-bottom: 4px; }
-    aside nav button.on, aside nav button:hover { background: rgba(255,255,255,.1); color: #fff; }
+    aside { background: rgba(10, 5, 22, .75); border-right: 1px solid var(--line); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); padding: 22px 14px; }
+    @media (min-width: 900px) { aside { position: sticky; top: 0; height: 100vh; } }
+    aside .logo { margin: 4px 0 28px 6px; display: flex; }
+    aside nav button { display: flex; gap: 10px; width: 100%; text-align: left; padding: 11px 14px; border: 0; border-radius: 999px; background: transparent; color: var(--mute); font: inherit; font-weight: 500; cursor: pointer; margin-bottom: 4px; }
+    aside nav button:hover { background: rgba(201, 184, 255, .08); color: var(--star); }
+    aside nav button.on { background: linear-gradient(120deg, rgba(139, 92, 246, .35), rgba(217, 70, 239, .2)); color: var(--star); box-shadow: 0 0 0 1px var(--line) inset; }
     @media (max-width: 899px) { aside nav { display: flex; overflow-x: auto; gap: 4px; } aside nav button { white-space: nowrap; width: auto; } aside .bottom { display: none; } }
     main { padding: 28px clamp(16px, 3vw, 40px); max-width: 1180px; }
     .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
     .tab { display: none; }
     .tab.on { display: block; }
-    .kpi .v { font-size: 32px; font-weight: 900; }
+    .kpi .v { font: 700 30px/1.1 var(--display); background: linear-gradient(100deg, #fff, var(--lilac) 50%, var(--plasma)); -webkit-background-clip: text; background-clip: text; color: transparent; }
     .kpi .l { color: var(--muted); font-size: 14px; }
     .chart { display: flex; align-items: flex-end; gap: 4px; height: 160px; padding-top: 10px; }
     .chart div { flex: 1; background: linear-gradient(180deg, var(--brand), var(--brand-2)); border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
-    .chart div:hover::after { content: attr(data-t); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--ink); color: #fff; font-size: 11px; padding: 3px 6px; border-radius: 6px; white-space: nowrap; }
-    .bar { height: 10px; border-radius: 99px; background: #EDE9FE; overflow: hidden; }
+    .chart div:hover::after { content: attr(data-t); position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); background: var(--deep); border: 1px solid var(--line); color: var(--star); font-size: 11px; padding: 3px 6px; border-radius: 6px; white-space: nowrap; }
+    .bar { height: 8px; border-radius: 99px; background: rgba(201, 184, 255, .1); overflow: hidden; }
     .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--brand), var(--brand-2)); }
     .prize-row { display: grid; grid-template-columns: 44px 1fr 90px 90px 110px 36px; gap: 8px; align-items: center; margin-bottom: 8px; }
     .prize-row input[type=color] { padding: 2px; height: 42px; }
     @media (max-width: 700px) { .prize-row { grid-template-columns: 40px 1fr 70px 36px; } .prize-row .opt { display: none; } }
     .wheel-prev canvas { width: 280px; height: 280px; }
-    .reply { white-space: pre-wrap; background: #F8FAFC; border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+    .reply { white-space: pre-wrap; background: rgba(139, 92, 246, .08); border: 1px solid var(--line); border-radius: 14px; padding: 16px; color: var(--star); }
     .stars button { font-size: 26px; background: none; border: 0; cursor: pointer; padding: 0 2px; filter: grayscale(1); opacity: .4; }
     .stars button.on { filter: none; opacity: 1; }
     .redeem-box { max-width: 520px; }
@@ -39,7 +42,7 @@
 <body>
 <div class="layout">
   <aside>
-    <a class="logo" href="/"><span class="dot">Q</span>Qlick Boost</a>
+    <a class="logo" href="/"><svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="qg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8B5CF6"/><stop offset="1" stop-color="#D946EF"/></linearGradient></defs><circle cx="15" cy="15" r="10.5" fill="none" stroke="url(#qg)" stroke-width="3.2"/><circle cx="24.5" cy="24.5" r="3.6" fill="#F3EEFF"/></svg>Qlick <small>Boost</small></a>
     <nav id="nav">
       <button data-tab="overview" class="on">📊 Vue d'ensemble</button>
       <button data-tab="wheel">🎡 Ma roue</button>
@@ -49,15 +52,16 @@
       <button data-tab="contacts">📇 Clients</button>
       <button data-tab="ai">🤖 Réponses IA</button>
     </nav>
-    <div class="bottom" style="margin-top:30px;font-size:13px;color:#A5B4FC">
+    <div class="bottom" style="margin-top:30px;font-size:13px;color:var(--mute);padding-left:8px">
       <div id="me"></div>
-      <button class="btn small ghost" id="logout" style="color:#fff;border-color:#4338CA;margin-top:10px">Déconnexion</button>
+      <button class="btn small ghost" id="logout" style="margin-top:10px">Déconnexion</button>
+      <p style="margin-top:22px">Une question ? <a href="mailto:contact@qlick.fr">contact@qlick.fr</a></p>
     </div>
   </aside>
 
   <main>
     <div class="top">
-      <div><h1 id="bizName" style="margin:0">…</h1><span class="badge">Essai gratuit · 14 jours</span></div>
+      <div><h1 id="bizName" style="margin:0 0 8px;font-size:clamp(1.4rem,3vw,2rem)">…</h1><span class="badge">Essai gratuit · 14 jours</span></div>
       <a class="btn ghost small" id="openPlay" target="_blank">Ouvrir ma roue ↗</a>
     </div>
 
@@ -318,12 +322,12 @@ $('#printKit').onclick = () => {
   const w = window.open('', '_blank');
   w.document.write(`<html><head><title>Chevalet ${esc(me.business.name)}</title><style>
     body{font-family:system-ui;margin:0;display:grid;place-items:center;min-height:100vh}
-    .k{width:105mm;border:2px solid #1E1B4B;border-radius:8mm;padding:10mm;text-align:center}
-    h1{margin:0;font-size:28px;color:${me.business.primaryColor}} p{color:#475569}
+    .k{width:105mm;border:2px solid #110824;border-radius:8mm;padding:10mm;text-align:center}
+    h1{margin:0;font-size:28px;color:${me.business.primaryColor}} p{color:#475569} .q{font-size:10px;color:#8B5CF6;margin-top:6mm}
   </style></head><body><div class="k"><h1>🎁 Tentez votre chance !</h1>
     <p>Scannez, donnez votre avis<br>et faites tourner la roue</p>
     <img src="/api/qrcode.png?size=800" style="width:70mm;height:70mm">
-    <p><b>${esc(me.business.name)}</b><br><small>100 % gagnant ? Presque ! Règlement disponible en caisse.</small></p>
+    <p><b>${esc(me.business.name)}</b><br><small>Règlement du jeu disponible en caisse.</small></p><div class="q">Propulsé par Qlick Boost · qlick.fr</div>
   </div><script>setTimeout(()=>print(),600)<\/script></body></html>`);
   w.document.close();
 };

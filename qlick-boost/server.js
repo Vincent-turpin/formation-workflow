@@ -10,9 +10,35 @@ const { generateReviewReply } = require('./ai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const PROD = process.env.NODE_ENV === 'production';
 const SECRET = process.env.QLICK_SECRET || 'dev-secret-change-me';
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const BASE_URL = (process.env.BASE_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+const SECURE_COOKIE = BASE_URL.startsWith('https://');
+const DEMO = process.env.QLICK_DEMO === '1' || !PROD;
 
+if (PROD) {
+  const missing = [];
+  if (!process.env.QLICK_SECRET || process.env.QLICK_SECRET.length < 32) missing.push('QLICK_SECRET (32 caractères minimum)');
+  if (!process.env.BASE_URL) missing.push('BASE_URL');
+  if (missing.length) {
+    console.error(`Configuration de production incomplète : ${missing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
+// derrière l'hébergeur (Render, Railway, Nginx…) : IP réelle et HTTPS
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  if (SECURE_COOKIE) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  next();
+});
+app.get('/healthz', (req, res) => res.json({ ok: true }));
+const SIGNUP_CODE = process.env.QLICK_SIGNUP_CODE || '';
+app.get('/api/config', (req, res) => res.json({ demo: DEMO, inviteRequired: !!SIGNUP_CODE }));
 app.use(express.json({ limit: '200kb' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
@@ -51,7 +77,7 @@ function getCookie(req, name) {
   return m ? decodeURIComponent(m.slice(name.length + 1)) : null;
 }
 function setCookie(res, name, value, maxAgeSec) {
-  res.append('Set-Cookie', `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}`);
+  res.append('Set-Cookie', `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${SECURE_COOKIE ? '; Secure' : ''}`);
 }
 
 function slugify(s) {
@@ -67,12 +93,12 @@ function couponCode() {
 }
 
 const DEFAULT_PRIZES = [
-  { label: 'Café offert', color: '#7C3AED', weight: 30, stock: null, kind: 'win' },
-  { label: '-10% sur l\'addition', color: '#EC4899', weight: 25, stock: null, kind: 'win' },
-  { label: 'Perdu… retentez !', color: '#94A3B8', weight: 25, stock: null, kind: 'lose' },
-  { label: 'Dessert offert', color: '#F59E0B', weight: 12, stock: null, kind: 'win' },
-  { label: 'Boisson offerte', color: '#10B981', weight: 7, stock: null, kind: 'win' },
-  { label: 'Repas offert', color: '#EF4444', weight: 1, stock: 5, kind: 'win' },
+  { label: 'Café offert', color: '#8B5CF6', weight: 30, stock: null, kind: 'win' },
+  { label: '-10% sur l\'addition', color: '#D946EF', weight: 25, stock: null, kind: 'win' },
+  { label: 'Perdu… retentez !', color: '#B3AACF', weight: 25, stock: null, kind: 'lose' },
+  { label: 'Dessert offert', color: '#6D28D9', weight: 12, stock: null, kind: 'win' },
+  { label: 'Boisson offerte', color: '#C026D3', weight: 7, stock: null, kind: 'win' },
+  { label: 'Repas offert', color: '#110824', weight: 1, stock: 5, kind: 'win' },
 ];
 
 // ---------- auth ----------
@@ -93,7 +119,7 @@ function createBusinessFor(user, name) {
   while (data.businesses.some((b) => b.slug === slug)) slug = `${slugify(name)}-${crypto.randomInt(1000, 9999)}`;
   const business = {
     id: uid(), ownerId: user.id, name, slug, createdAt: now(),
-    googleReviewUrl: '', instagramUrl: '', primaryColor: '#7C3AED',
+    googleReviewUrl: '', instagramUrl: '', primaryColor: '#8B5CF6',
     welcomeText: `Tentez votre chance chez ${name} !`,
     actions: { google: true, instagram: false, none: false },
     cooldownDays: 30, couponValidityDays: 30, minDelayHours: 0,
@@ -106,7 +132,8 @@ function createBusinessFor(user, name) {
 }
 
 app.post('/api/auth/signup', (req, res) => {
-  const { email, password, businessName } = req.body || {};
+  const { email, password, businessName, inviteCode } = req.body || {};
+  if (SIGNUP_CODE && String(inviteCode || '').trim() !== SIGNUP_CODE) return res.status(403).json({ error: 'Code d\'invitation invalide. Contactez Qlick : contact@qlick.fr' });
   if (!email || !password || !businessName) return res.status(400).json({ error: 'Champs requis : email, mot de passe, nom du commerce' });
   if (password.length < 8) return res.status(400).json({ error: 'Mot de passe : 8 caractères minimum' });
   const data = db.load();
@@ -163,7 +190,7 @@ app.put('/api/prizes', requireAuth, (req, res) => {
     data.prizes.push({
       id: p.id || uid(), businessId: req.business.id,
       label: String(p.label || 'Lot').slice(0, 40),
-      color: /^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#7C3AED',
+      color: /^#[0-9a-f]{6}$/i.test(p.color) ? p.color : '#8B5CF6',
       weight: Math.max(0, Number(p.weight) || 0),
       stock: p.stock === null || p.stock === '' || p.stock === undefined ? null : Math.max(0, parseInt(p.stock, 10) || 0),
       kind: p.kind === 'lose' ? 'lose' : 'win',
@@ -237,7 +264,7 @@ app.post('/api/redeem', requireAuth, (req, res) => {
 // ---------- QR code ----------
 app.get('/api/qrcode.png', requireAuth, async (req, res) => {
   const url = `${BASE_URL}/play/${req.business.slug}?src=qr`;
-  const png = await QRCode.toBuffer(url, { width: Number(req.query.size) || 600, margin: 2, color: { dark: '#1E1B4B', light: '#FFFFFF' } });
+  const png = await QRCode.toBuffer(url, { width: Number(req.query.size) || 600, margin: 2, color: { dark: '#110824', light: '#FFFFFF' } });
   res.type('png').send(png);
 });
 
@@ -302,7 +329,7 @@ app.post('/api/public/:slug/spin', (req, res) => {
   const { b, prizes } = r;
   const { firstName, email, phone, action, marketingOptIn, consent } = req.body || {};
 
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
+  const ip = req.ip;
   const key = `${b.id}:${ip}`;
   const hits = (spinAttempts.get(key) || []).filter((t) => t > Date.now() - 3600e3);
   if (hits.length >= 10) return res.status(429).json({ error: 'Trop de tentatives, réessayez plus tard' });
@@ -370,6 +397,7 @@ process.on('SIGINT', () => { db.flush(); process.exit(0); });
 process.on('SIGTERM', () => { db.flush(); process.exit(0); });
 
 if (require.main === module) {
-  app.listen(PORT, () => console.log(`Qlick Boost démarré sur ${BASE_URL}`));
+  if (DEMO) require('./seed').seedDemo();
+  app.listen(PORT, () => console.log(`Qlick Boost démarré sur ${BASE_URL}${PROD ? ' (production)' : ''}`));
 }
 module.exports = app;

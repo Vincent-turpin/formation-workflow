@@ -16,7 +16,7 @@ class Wheel {
     ctx.save();
     ctx.translate(r, r);
     // anneau extérieur
-    ctx.beginPath(); ctx.arc(0, 0, r - 2, 0, Math.PI * 2); ctx.fillStyle = '#1E1B4B'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r - 2, 0, Math.PI * 2); ctx.fillStyle = '#110824'; ctx.fill();
     ctx.rotate(this.angle);
     for (let i = 0; i < n; i++) {
       const start = -Math.PI / 2 + i * arc;
@@ -30,7 +30,7 @@ class Wheel {
       ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
       ctx.fillStyle = '#fff';
       const fs = Math.max(12, Math.min(26, size / (n * 2.6)));
-      ctx.font = `800 ${fs}px Inter, system-ui, sans-serif`;
+      ctx.font = `600 ${fs}px 'Instrument Sans', system-ui, sans-serif`;
       this.wrap(segments[i].label, r - 30, fs);
       ctx.restore();
     }
@@ -40,16 +40,16 @@ class Wheel {
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2;
       ctx.beginPath(); ctx.arc(Math.cos(a) * (r - 8), Math.sin(a) * (r - 8), 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = i % 2 ? '#FDE68A' : '#fff'; ctx.fill();
+      ctx.fillStyle = i % 2 ? '#D946EF' : '#F3EEFF'; ctx.fill();
     }
     // moyeu
     ctx.beginPath(); ctx.arc(0, 0, r * 0.13, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
-    ctx.beginPath(); ctx.arc(0, 0, r * 0.09, 0, Math.PI * 2); ctx.fillStyle = '#1E1B4B'; ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, r * 0.09, 0, Math.PI * 2); ctx.fillStyle = '#110824'; ctx.fill();
     ctx.restore();
     // pointeur
     ctx.beginPath();
     ctx.moveTo(r - 18, 4); ctx.lineTo(r + 18, 4); ctx.lineTo(r, 42); ctx.closePath();
-    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#1E1B4B'; ctx.lineWidth = 4; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#110824'; ctx.lineWidth = 4; ctx.fill(); ctx.stroke();
   }
 
   wrap(text, x, fs) {

@@ -1,6 +1,6 @@
 # Qlick Boost
 
-Solution SaaS de l'agence **Qlick** pour aider les commerces de proximité à obtenir plus d'avis Google, plus d'abonnés Instagram et plus de clients fidèles, grâce à une **roue de la fortune** accessible par QR code.
+Solution SaaS de l'agence **[Qlick](https://qlick.fr)** (Bordeaux & La Réunion), aux couleurs de sa charte graphique, pour aider les commerces de proximité à obtenir plus d'avis Google, plus d'abonnés Instagram et plus de clients fidèles, grâce à une **roue de la fortune** accessible par QR code.
 
 ## Parcours client (mobile, sans application)
 1. Le client scanne le QR code (table, comptoir, ticket).
@@ -26,24 +26,19 @@ npm run seed     # compte démo : demo@qlick.fr / demo1234, roue publique : /pla
 npm start        # http://localhost:3000
 ```
 
-Variables d'environnement :
-
-| Variable | Rôle |
-|---|---|
-| `PORT` | Port HTTP (3000 par défaut) |
-| `BASE_URL` | URL publique, utilisée dans les QR codes (ex. `https://boost.qlick.fr`) |
-| `QLICK_SECRET` | Secret de signature des sessions, **obligatoire en production** |
-| `ANTHROPIC_API_KEY` | Active la génération des réponses aux avis par IA |
-| `QLICK_AI_MODEL` | Modèle Claude à utiliser (`claude-opus-5-5` par défaut) |
-| `QLICK_DB` | Chemin du fichier de données (`data/db.json` par défaut) |
+Les variables d'environnement (production, IA, démo, code d'invitation) et la mise en ligne sont décrites dans **[DEPLOIEMENT.md](DEPLOIEMENT.md)**.
 
 ## Architecture
 - `server.js` : API Express (auth, roue, tirage, bons, stats, QR, export CSV)
 - `ai.js` : génération des réponses aux avis avec le SDK Anthropic
 - `db.js` : stockage dans un fichier JSON (MVP). À remplacer par PostgreSQL ou Supabase en production.
+- `public/style.css` : charte Qlick (fond `#06030D`, dégradé `#8B5CF6` → `#D946EF`, polices Unbounded + Instrument Sans)
 - `public/` : site vitrine, jeu client, bon cadeau, connexion, tableau de bord (HTML/CSS/JS sans framework)
 
-## Prochaines étapes pour la production
+## Mise en production
+Voir **[DEPLOIEMENT.md](DEPLOIEMENT.md)** : Render (fichier `render.yaml` à la racine du dépôt) ou VPS avec le `Dockerfile`.
+
+## Prochaines étapes
 - Base PostgreSQL et hébergement (Render, Railway, Fly.io)
 - Paiement des abonnements avec Stripe Billing
 - Envoi du bon par email (Brevo, Resend) et campagnes email/SMS

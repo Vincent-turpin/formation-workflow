@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>Tentez votre chance !</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <style>
     body { min-height: 100vh; background: radial-gradient(600px 400px at 50% -10%, color-mix(in srgb, var(--brand) 25%, transparent), transparent), var(--bg); }
     main { max-width: 460px; margin: 0 auto; padding: 28px 18px 40px; text-align: center; }
-    h1 { font-size: 26px; font-weight: 900; }
+    h1 { font-size: 24px; }
     .step { display: none; }
     .step.active { display: block; animation: fade .35s ease; }
     @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -18,7 +19,7 @@
     .action b { display: block; }
     canvas { width: min(88vw, 380px); height: min(88vw, 380px); }
     .result { padding: 28px 20px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
-    .result .prize { font-size: 28px; font-weight: 900; color: var(--brand); margin: 6px 0 14px; }
+    .result .prize { font: 700 26px/1.2 var(--display); color: var(--brand); margin: 6px 0 14px; }
     .code { font-family: ui-monospace, monospace; font-size: 26px; font-weight: 800; letter-spacing: .1em; padding: 12px; border: 2px dashed var(--brand); border-radius: 12px; margin: 12px 0; }
     form { text-align: left; }
     .brandbar { font-size: 12px; color: var(--muted); margin-top: 30px; }
@@ -26,7 +27,7 @@
     @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
   </style>
 </head>
-<body>
+<body class="light">
 <main>
   <div id="loading" class="muted">Chargement…</div>
 
@@ -78,7 +79,7 @@
     <div class="result" id="result"></div>
   </section>
 
-  <div class="brandbar">Propulsé par <b>Qlick Boost</b></div>
+  <div class="brandbar">Propulsé par <a href="https://qlick.fr" target="_blank" rel="noopener"><b>Qlick Boost</b></a></div>
 </main>
 
 <script src="/wheel.js"></script>
@@ -172,7 +173,7 @@ function renderResult(d) {
 }
 
 function confetti() {
-  const colors = ['#7C3AED', '#EC4899', '#F59E0B', '#10B981', '#3B82F6'];
+  const colors = ['#8B5CF6', '#D946EF', '#C9B8FF', '#6D28D9', '#F3EEFF'];
   for (let i = 0; i < 120; i++) {
     const c = document.createElement('div'); c.className = 'confetti';
     c.style.left = Math.random() * 100 + 'vw'; c.style.background = colors[i % colors.length];

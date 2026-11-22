@@ -1,0 +1,30 @@
+# Déploiement en un clic sur Render (Blueprint)
+services:
+  - type: web
+    name: qlick-boost
+    runtime: node
+    rootDir: qlick-boost
+    plan: starter
+    region: frankfurt
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    disk:
+      name: qlick-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: QLICK_DB
+        value: /data/db.json
+      - key: QLICK_SECRET
+        generateValue: true
+      - key: BASE_URL
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: QLICK_DEMO
+        value: "1"
+      - key: QLICK_DEMO_PASSWORD
+        sync: false
