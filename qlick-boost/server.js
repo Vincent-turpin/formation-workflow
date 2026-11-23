@@ -7,6 +7,8 @@ const path = require('path');
 const QRCode = require('qrcode');
 const db = require('./db');
 const { generateReviewReply } = require('./ai');
+const mailer = require('./mailer');
+const google = require('./google');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -129,12 +131,17 @@ function ensureAdmin() {
   db.save();
 }
 
+const DEFAULT_FOLLOWUP = `Merci d'avoir pris le temps de nous donner votre avis. Nous cherchons toujours à faire mieux : qu'est-ce qui aurait rendu votre visite parfaite ?
+
+Répondez simplement à cet email, nous lisons chaque message.`;
+
 function migrate() {
   const data = db.load();
   for (const b of data.businesses) {
     if (!b.staffPin) b.staffPin = newPin();
     b.actions = { google: false, instagram: false, tiktok: false, facebook: false, none: false, ...b.actions };
     for (const k of Object.values(ACTION_URL)) b[k] ??= '';
+    b.feedbackEnabled ??= true; b.followupEnabled ??= true; b.alertEmail ??= ''; b.followupMessage ??= DEFAULT_FOLLOWUP;
   }
   db.save();
 }
@@ -159,6 +166,11 @@ function requireAuth(req, res, next) {
   req.session = s;
   req.business = data.businesses.find((b) => b.ownerId === user.id);
   next();
+}
+// données du commerce renvoyées au navigateur (sans les secrets)
+function publicSelf(b) {
+  const { google: g, ...rest } = b;
+  return { ...rest, googleConnected: !!g?.refreshToken };
 }
 function requireBusiness(req, res, next) {
   if (!req.business) return res.status(403).json({ error: 'Aucun établissement lié à ce compte' });
@@ -189,6 +201,7 @@ function createBusinessFor(user, name) {
     collectPhone: false, plan: 'trial', active: true,
     logo: null, winText: 'Félicitations !', loseText: 'Pas de chance cette fois… Merci pour votre participation, retentez votre chance lors de votre prochaine visite !',
     rulesText: '', notes: '',
+    feedbackEnabled: true, followupEnabled: true, alertEmail: '', followupMessage: DEFAULT_FOLLOWUP,
   };
   data.businesses.push(business);
   DEFAULT_PRIZES.forEach((p) => data.prizes.push({ id: uid(), businessId: business.id, ...p, active: true }));
@@ -239,19 +252,23 @@ app.get('/api/me', requireAuth, (req, res) => {
   const b = req.business;
   res.json({
     email: req.user.email, role: req.user.role || 'client', impersonating: !!req.session.as,
-    business: b || null, plan: b ? { id: b.plan, ...planOf(b) } : null,
+    business: b ? publicSelf(b) : null, plan: b ? { id: b.plan, ...planOf(b) } : null,
     playUrl: b ? `${BASE_URL}/play/${b.slug}` : null,
   });
 });
 
 // ---------- configuration du commerce ----------
-const EDITABLE = ['name', 'googleReviewUrl', 'instagramUrl', 'tiktokUrl', 'facebookUrl', 'primaryColor', 'welcomeText', 'cooldownDays', 'couponValidityDays', 'minDelayHours', 'collectPhone', 'actions', 'winText', 'loseText', 'rulesText'];
-const TEXT_LIMITS = { name: 80, welcomeText: 200, winText: 120, loseText: 300, rulesText: 8000, googleReviewUrl: 500, instagramUrl: 500, tiktokUrl: 500, facebookUrl: 500 };
+const EDITABLE = ['name', 'googleReviewUrl', 'instagramUrl', 'tiktokUrl', 'facebookUrl', 'primaryColor', 'welcomeText', 'cooldownDays', 'couponValidityDays', 'minDelayHours', 'collectPhone', 'actions', 'winText', 'loseText', 'rulesText', 'feedbackEnabled', 'followupEnabled', 'alertEmail', 'followupMessage'];
+const TEXT_LIMITS = { name: 80, welcomeText: 200, winText: 120, loseText: 300, rulesText: 8000, alertEmail: 200, followupMessage: 2000, googleReviewUrl: 500, instagramUrl: 500, tiktokUrl: 500, facebookUrl: 500 };
 app.put('/api/business', requireAuth, requireBusiness, (req, res) => {
   const b = req.business;
   for (const k of EDITABLE) if (k in req.body) b[k] = req.body[k];
   for (const [k, max] of Object.entries(TEXT_LIMITS)) b[k] = String(b[k] ?? '').slice(0, max);
   if (!/^#[0-9a-f]{6}$/i.test(b.primaryColor)) b.primaryColor = '#8B5CF6';
+  b.feedbackEnabled = b.feedbackEnabled !== false; b.followupEnabled = b.followupEnabled !== false;
+  b.alertEmail = b.alertEmail.trim().toLowerCase();
+  if (b.alertEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.alertEmail)) return res.status(400).json({ error: 'Email d\'alerte invalide' });
+  if (!b.followupMessage.trim()) b.followupMessage = DEFAULT_FOLLOWUP;
   for (const k of Object.values(ACTION_URL)) if (b[k] && !/^https:\/\//i.test(b[k])) b[k] = '';
   b.actions = Object.fromEntries([...SOCIAL_ACTIONS, 'none'].map((a) => [a, !!b.actions?.[a]]));
   if ('logo' in req.body) {
@@ -264,7 +281,7 @@ app.put('/api/business', requireAuth, requireBusiness, (req, res) => {
   b.couponValidityDays = Math.max(1, Number(b.couponValidityDays) || 30);
   b.minDelayHours = Math.max(0, Number(b.minDelayHours) || 0);
   db.save();
-  res.json(b);
+  res.json(publicSelf(b));
 });
 
 // ---------- lots ----------
@@ -382,6 +399,133 @@ app.post('/api/reviews/reply', requireAuth, requireBusiness, requirePlan('ai'), 
   }
 });
 
+// ---------- satisfaction : alertes et suivi des clients mécontents ----------
+function merchantEmail(b) {
+  if (b.alertEmail) return b.alertEmail;
+  return db.load().users.find((u) => u.id === b.ownerId)?.email || '';
+}
+async function notifyFeedback(b, p) {
+  const { layout, escapeHtml: e, sendMail } = mailer;
+  const stars = '★'.repeat(p.rating) + '☆'.repeat(5 - p.rating);
+  const to = merchantEmail(b);
+  const alert = await sendMail({
+    to, subject: `${stars} ${p.rating}/5 — un client de ${b.name} n'est pas pleinement satisfait`,
+    fromName: 'Qlick Boost',
+    replyTo: p.email,
+    html: layout({
+      color: b.primaryColor, title: `Nouvelle note ${p.rating}/5 chez ${b.name}`,
+      body: `<p style="font-size:22px;color:#F59E0B;margin:0 0 10px">${stars}</p>
+        <p><b>${e(p.firstName)}</b> (${e(p.email)}${p.phone ? ` · ${e(p.phone)}` : ''})<br>le ${new Date(p.createdAt).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' })}</p>
+        ${p.feedback ? `<blockquote style="margin:14px 0;padding:12px 16px;background:#F5F3FF;border-left:4px solid ${b.primaryColor};border-radius:8px">${e(p.feedback).replace(/\n/g, '<br>')}</blockquote>` : '<p style="color:#6B6390">Aucun commentaire laissé.</p>'}
+        <p>${b.followupEnabled !== false ? 'Un email de suivi lui a été envoyé automatiquement. ' : ''}<b>Répondez directement à cet email</b> pour le recontacter.</p>
+        <p><a href="${BASE_URL}/dashboard" style="color:${b.primaryColor}">Voir tous les retours dans votre tableau de bord</a></p>`,
+      footer: 'Alerte envoyée par Qlick Boost — qlick.fr',
+    }),
+  });
+  if (alert.sent) p.alertSentAt = now();
+  if (b.followupEnabled !== false) {
+    const follow = await sendMail({
+      to: p.email, replyTo: to, fromName: b.name,
+      subject: `${b.name} : merci pour votre retour`,
+      html: layout({
+        color: b.primaryColor, title: `Bonjour ${p.firstName},`,
+        body: `<p style="white-space:pre-line;line-height:1.6">${e(b.followupMessage || DEFAULT_FOLLOWUP)}</p><p>L'équipe ${e(b.name)}</p>`,
+        footer: `Vous recevez cet email suite à votre avis laissé lors de votre participation au jeu de ${e(b.name)}. Vos données sont traitées conformément au règlement du jeu.`,
+      }),
+    });
+    if (follow.sent) p.followupSentAt = now();
+  }
+  db.save();
+}
+
+app.get('/api/feedback', requireAuth, requireBusiness, (req, res) => {
+  const list = db.load().participations.filter((p) => p.businessId === req.business.id && p.rating)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((p) => ({ id: p.id, createdAt: p.createdAt, firstName: p.firstName, email: p.email, phone: p.phone, rating: p.rating, feedback: p.feedback, handled: !!p.feedbackHandled, alertSentAt: p.alertSentAt, followupSentAt: p.followupSentAt }));
+  const dist = [1, 2, 3, 4, 5].map((n) => list.filter((f) => f.rating === n).length);
+  const avg = list.length ? list.reduce((s, f) => s + f.rating, 0) / list.length : null;
+  res.json({ average: avg, count: list.length, distribution: dist, toHandle: list.filter((f) => f.rating <= 4 && !f.handled).length, emailEnabled: mailer.enabled(), items: list });
+});
+app.put('/api/feedback/:id', requireAuth, requireBusiness, (req, res) => {
+  const p = db.load().participations.find((x) => x.id === req.params.id && x.businessId === req.business.id && x.rating);
+  if (!p) return res.status(404).json({ error: 'Retour introuvable' });
+  p.feedbackHandled = !!req.body?.handled;
+  db.save();
+  res.json({ ok: true });
+});
+
+// ---------- Google Business Profile : vrais avis Google + réponses ----------
+const GOOGLE_REDIRECT = `${BASE_URL}/api/google/callback`;
+function googleToken(b) {
+  if (!b.google?.refreshToken) throw Object.assign(new Error('Fiche Google non connectée'), { status: 400 });
+  return google.accessToken(google.decrypt(b.google.refreshToken, SECRET));
+}
+const gErr = (res, e) => res.status(e.status && e.status < 500 ? e.status : 502).json({ error: e.message });
+
+app.get('/api/google/status', requireAuth, requireBusiness, (req, res) => {
+  const g = req.business.google;
+  res.json({ configured: google.configured(), connected: !!g?.refreshToken, location: g?.location || null, locations: g?.locations || [], connectedAt: g?.connectedAt || null });
+});
+app.get('/api/google/connect', requireAuth, requireBusiness, (req, res) => {
+  if (!google.configured()) return res.status(503).send('Connexion Google non configurée (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).');
+  res.redirect(google.authUrl(GOOGLE_REDIRECT, sign({ bid: req.business.id, exp: Date.now() + 15 * 60e3 })));
+});
+app.get('/api/google/callback', requireAuth, requireBusiness, async (req, res) => {
+  const st = unsign(String(req.query.state || ''));
+  if (!st || st.bid !== req.business.id) return res.redirect('/dashboard?google=erreur#ai');
+  if (req.query.error || !req.query.code) return res.redirect('/dashboard?google=annule#ai');
+  try {
+    const tok = await google.exchangeCode(String(req.query.code), GOOGLE_REDIRECT);
+    if (!tok.refresh_token) throw new Error('Google n\'a pas fourni d\'accès durable');
+    const locations = await google.listLocations(tok.access_token);
+    req.business.google = {
+      refreshToken: google.encrypt(tok.refresh_token, SECRET), connectedAt: now(), locations,
+      location: locations.length === 1 ? locations[0] : null,
+    };
+    db.save();
+    res.redirect('/dashboard?google=ok#ai');
+  } catch (e) {
+    console.error('[google]', e.message);
+    res.redirect(`/dashboard?google=erreur&msg=${encodeURIComponent(e.message.slice(0, 200))}#ai`);
+  }
+});
+app.post('/api/google/location', requireAuth, requireBusiness, (req, res) => {
+  const g = req.business.google;
+  const loc = g?.locations?.find((l) => l.path === req.body?.path);
+  if (!loc) return res.status(400).json({ error: 'Fiche inconnue' });
+  g.location = loc; db.save();
+  res.json({ ok: true, location: loc });
+});
+app.post('/api/google/disconnect', requireAuth, requireBusiness, (req, res) => {
+  delete req.business.google; db.save();
+  res.json({ ok: true });
+});
+app.get('/api/google/reviews', requireAuth, requireBusiness, async (req, res) => {
+  try {
+    const loc = req.business.google?.location;
+    if (!loc) return res.status(400).json({ error: 'Choisissez d\'abord votre fiche Google' });
+    res.json(await google.listReviews(await googleToken(req.business), loc.path));
+  } catch (e) { gErr(res, e); }
+});
+app.post('/api/google/reviews/:id/suggest', requireAuth, requireBusiness, requirePlan('ai'), async (req, res) => {
+  const { author, rating, comment, tone } = req.body || {};
+  try {
+    const r = await generateReviewReply({ businessName: req.business.name, author, rating: Number(rating) || 5, text: comment || '', tone: tone || 'chaleureux' });
+    res.json({ reply: r.text, source: r.source });
+  } catch (e) { res.status(502).json({ error: 'Génération impossible pour le moment' }); }
+});
+app.post('/api/google/reviews/:id/reply', requireAuth, requireBusiness, async (req, res) => {
+  const comment = String(req.body?.comment || '').trim();
+  if (!comment) return res.status(400).json({ error: 'Réponse vide' });
+  if (comment.length > 4000) return res.status(400).json({ error: 'Réponse trop longue (4 000 caractères max)' });
+  try {
+    const loc = req.business.google?.location;
+    if (!loc) return res.status(400).json({ error: 'Choisissez d\'abord votre fiche Google' });
+    await google.replyToReview(await googleToken(req.business), loc.path, req.params.id, comment);
+    res.json({ ok: true });
+  } catch (e) { gErr(res, e); }
+});
+
 // ---------- espace agence Qlick ----------
 function businessSummary(b, data) {
   const parts = data.participations.filter((p) => p.businessId === b.id);
@@ -484,6 +628,7 @@ app.get('/api/public/:slug', (req, res) => {
     actionUrls: Object.fromEntries(social.map((a) => [a, b[ACTION_URL[a]]])),
     logoUrl: b.logo ? `/logo/${b.slug}?v=${b.logo.length}` : null,
     winText: b.winText || 'Félicitations !', loseText: b.loseText || '',
+    feedbackEnabled: b.feedbackEnabled !== false, followupEnabled: b.followupEnabled !== false,
     googleReviewUrl: b.googleReviewUrl, instagramUrl: b.instagramUrl, actions: b.actions, collectPhone: b.collectPhone,
     // les poids (probabilités) ne sont jamais exposés au client
     segments: prizes.map((p) => ({ id: p.id, label: p.label, color: p.color })),
@@ -506,6 +651,8 @@ app.post('/api/public/:slug/spin', (req, res) => {
   if (!r) return res.status(404).json({ error: 'Commerce introuvable' });
   const { b, prizes } = r;
   const { firstName, email, phone, action, marketingOptIn, consent } = req.body || {};
+  const rating = b.feedbackEnabled !== false && Number.isInteger(req.body?.rating) && req.body.rating >= 1 && req.body.rating <= 5 ? req.body.rating : null;
+  const feedback = rating ? String(req.body?.feedback || '').trim().slice(0, 1000) : '';
 
   const ip = req.ip;
   const key = `${b.id}:${ip}`;
@@ -541,10 +688,13 @@ app.post('/api/public/:slug/spin', (req, res) => {
     validFrom: new Date(created.getTime() + b.minDelayHours * 3600e3).toISOString(),
     expiresAt: new Date(created.getTime() + b.couponValidityDays * 864e5).toISOString(),
     redeemedAt: null,
+    rating, feedback, feedbackHandled: false, alertSentAt: null, followupSentAt: null,
   };
   data.participations.push(participation);
   db.save();
   setCookie(res, 'qlick_device', device, 365 * 86400);
+  // note de 4 ou moins : alerte au commerçant et email de suivi au client (en arrière-plan)
+  if (rating && rating <= 4) notifyFeedback(b, participation).catch((e) => console.error('[feedback]', e.message));
 
   res.json({
     segmentId: prize.id, label: prize.label, kind: prize.kind,
@@ -595,7 +745,7 @@ Article 4 – Utilisation des gains
 Le bon cadeau est valable ${b.couponValidityDays} jours à compter de la participation${b.minDelayHours ? `, à partir de ${b.minDelayHours} heure(s) après la participation` : ''}, sur présentation du code dans l'établissement. Il est à usage unique.
 
 Article 5 – Données personnelles
-Les données collectées (prénom, email${b.collectPhone ? ', téléphone' : ''}) sont utilisées pour gérer la participation et, uniquement avec votre accord, pour vous adresser des offres de l'Organisateur. Elles sont conservées 3 ans maximum à compter du dernier contact. Vous pouvez exercer vos droits d'accès, de rectification et de suppression en contactant l'Organisateur. La plateforme technique est fournie par Qlick (5 rue Fénelon, 33000 Bordeaux), qui agit en tant que sous-traitant.
+Les données collectées (prénom, email${b.collectPhone ? ', téléphone' : ''}) sont utilisées pour gérer la participation et, uniquement avec votre accord, pour vous adresser des offres de l'Organisateur. ${b.feedbackEnabled !== false ? ' Si vous donnez une note de satisfaction de 4/5 ou moins, l\'Organisateur peut vous adresser un email pour comprendre comment s\'améliorer. Votre note n\'a aucune incidence sur le jeu ni sur la publication d\'un avis.' : ''} Elles sont conservées 3 ans maximum à compter du dernier contact. Vous pouvez exercer vos droits d'accès, de rectification et de suppression en contactant l'Organisateur. La plateforme technique est fournie par Qlick (5 rue Fénelon, 33000 Bordeaux), qui agit en tant que sous-traitant.
 
 Article 6 – Plateformes tierces
 Google, Instagram, TikTok et Facebook ne sont ni organisateurs ni parrains du jeu.

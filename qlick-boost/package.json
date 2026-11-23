@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node seed.js",
-    "test": "node --test test/api.test.js"
+    "test": "node --test test/api.test.js test/feedback-google.test.js"
   },
   "engines": {
     "node": ">=18"

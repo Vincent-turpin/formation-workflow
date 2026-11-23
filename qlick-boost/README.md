@@ -21,6 +21,8 @@ En local : `admin@qlick.fr` / `admin1234`. En production, le compte est défini 
 - **Personnalisation** : logo, couleur, textes, règlement du jeu (modèle généré automatiquement), aperçu en direct
 - **Actions** : avis Google, Instagram, TikTok, Facebook ou participation libre. La roue suggère une action différente à chaque visite.
 - **Page caisse** `/caisse/<commerce>` : le personnel valide les gains avec un code PIN, sans accès au compte (8 essais max par 15 min)
+- **Satisfaction privée** : avant la roue, « Comment s'est passée votre visite ? » (1 à 5 étoiles + commentaire). Pour 4/5 ou moins, une alerte part au commerçant et un email de suivi au client (Brevo). Le lien d'avis Google reste proposé à tous, quelle que soit la note, conformément aux règles de Google. Onglet **Avis clients** pour suivre et traiter les retours.
+- **Avis Google** : connexion OAuth à Google Business Profile pour lister les vrais avis et y répondre (suggestion IA + publication). Le jeton est chiffré sur le disque.
 - **Flyer A5** `/flyer/<commerce>` et **QR code public** `/qr/<commerce>.png`
 - **Vue d'ensemble** : participations, avis générés, contacts, taux de retour, graphique sur 30 jours.
 - **Ma roue** : lots, couleurs, poids (probabilités), stocks, gagnant/perdant, aperçu en direct.
@@ -47,6 +49,8 @@ Les variables d'environnement (production, IA, démo, code d'invitation) et la m
 
 ## Architecture
 - `server.js` : API Express (auth, roue, tirage, bons, stats, QR, export CSV)
+- `mailer.js` : envoi des emails via l'API Brevo
+- `google.js` : connexion OAuth et API Google Business Profile (avis, réponses)
 - `ai.js` : génération des réponses aux avis avec le SDK Anthropic
 - `db.js` : stockage dans un fichier JSON (MVP). À remplacer par PostgreSQL ou Supabase en production.
 - `public/style.css` : charte Qlick (fond `#06030D`, dégradé `#8B5CF6` → `#D946EF`, polices Unbounded + Instrument Sans)

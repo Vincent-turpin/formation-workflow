@@ -155,6 +155,36 @@ Vous changez l'offre d'un client directement dans la liste. **Suspendre** coupe 
 
 ---
 
+## Activer les emails (Brevo)
+
+Les emails servent aux **alertes de satisfaction** (note de 4/5 ou moins) et au **message de suivi** envoyé au client. Sans configuration, rien ne part, mais les retours restent visibles dans l'onglet « Avis clients ».
+
+1. Créez un compte gratuit sur https://www.brevo.com (300 emails par jour offerts).
+2. **Authentifiez le domaine qlick.fr** : Brevo → *Expéditeurs, domaines et IP dédiées* → *Domaines* → *Ajouter un domaine*. Brevo affiche 2 ou 3 enregistrements DNS (TXT / DKIM / DMARC) : ajoutez-les dans IONOS → Domaines & SSL → qlick.fr → DNS, puis cliquez sur *Vérifier*. Sans cette étape, les emails partent en spam.
+3. Ajoutez l'expéditeur `noreply@qlick.fr` (*Expéditeurs* → *Ajouter un expéditeur*).
+4. Créez une clé : *SMTP & API* → *Clés API* → *Générer une nouvelle clé*.
+5. Sur le serveur, dans `.env` : `BREVO_API_KEY=la-clé`, puis `docker compose up -d`.
+
+Les clients finaux reçoivent l'email **au nom du commerce** (« Kaza Street Food »). S'ils répondent, la réponse arrive directement sur l'email d'alerte du commerçant.
+
+## Activer la connexion Google Business Profile
+
+Elle permet à chaque commerçant de **voir ses vrais avis Google** dans son tableau de bord et d'**y répondre** (avec une suggestion de l'IA), sans aller sur Google. Une seule configuration suffit pour tous vos clients.
+
+1. **Projet Google Cloud** : sur https://console.cloud.google.com, créez un projet « Qlick Boost ». Notez son **numéro de projet**.
+2. **Demander l'accès aux API Business Profile** : remplissez le formulaire de demande d'accès indiqué sur https://developers.google.com/my-business/content/prereqs, avec le numéro de projet et l'email contact@qlick.fr. Google répond en général sous quelques jours. Tant que l'accès n'est pas accordé, les appels renvoient une erreur de quota, et l'application l'indique clairement.
+3. **Activer les API** (*API et services* → *Bibliothèque*) : « My Business Account Management API », « My Business Business Information API » et « Google My Business API ».
+4. **Écran de consentement OAuth** : type *Externe*, nom « Qlick Boost », domaine `qlick.fr`, champ d'application `https://www.googleapis.com/auth/business.manage`. Passez l'application *En production*. Google peut demander une vérification, avec une politique de confidentialité en ligne.
+5. **Identifiants** → *Créer des identifiants* → *ID client OAuth* → type *Application Web*. URI de redirection autorisé :
+   ```
+   https://boost.qlick.fr/api/google/callback
+   ```
+6. Sur le serveur, dans `.env` : `GOOGLE_CLIENT_ID=…` et `GOOGLE_CLIENT_SECRET=…`, puis `docker compose up -d`.
+
+Chaque commerçant clique ensuite sur **Avis Google & IA → Connecter ma fiche Google**, se connecte avec le compte Google qui gère sa fiche et choisit l'établissement. L'accès est enregistré **chiffré** sur le serveur et peut être retiré à tout moment (bouton « Déconnecter », ou depuis son compte Google).
+
+---
+
 ## Toutes les variables d'environnement
 
 | Variable | Obligatoire | Rôle |
@@ -165,6 +195,9 @@ Vous changez l'offre d'un client directement dans la liste. **Suspendre** coupe 
 | `QLICK_DB` | conseillé | Emplacement du fichier de données sur le disque persistant (`/data/db.json`) |
 | `QLICK_ADMIN_EMAIL` / `QLICK_ADMIN_PASSWORD` | oui | Compte de l'équipe Qlick qui donne accès à l'espace agence `/admin`. Il est créé au premier démarrage. Pour ajouter un second administrateur, changez l'email et redémarrez : le premier compte reste admin. |
 | `ANTHROPIC_API_KEY` | non | Active les réponses aux avis par IA |
+| `BREVO_API_KEY` | conseillé | Envoi des alertes de satisfaction et des emails de suivi (voir « Activer les emails ») |
+| `MAIL_FROM` / `MAIL_FROM_NAME` | non | Adresse et nom d'expéditeur des emails (`noreply@qlick.fr`, domaine à authentifier dans Brevo) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | non | Connexion aux fiches Google Business Profile (voir « Activer la connexion Google ») |
 | `QLICK_AI_MODEL` | non | Modèle Claude utilisé (`claude-opus-5-5` par défaut) |
 | `QLICK_DEMO` | non | `1` crée le compte démo et la roue `/play/demo`, utilisée par le bouton « Tester la roue » du site |
 | `QLICK_DEMO_PASSWORD` | non | Mot de passe du compte démo (sinon `demo1234`, à éviter en ligne) |
@@ -202,5 +235,4 @@ La version actuelle convient pour lancer avec vos **premiers clients**, jusqu'à
 | Pas de « mot de passe oublié » ni d'emails | Envoi d'emails transactionnels (Brevo, Resend) : bon cadeau, rappel avant expiration, réinitialisation du mot de passe |
 | Un compte = un établissement | Plusieurs établissements par compte (franchises) et plusieurs utilisateurs par établissement |
 | Logo stocké dans la base | Stockage des fichiers sur S3 / Cloudflare R2 quand le nombre de clients grandit |
-| Réponses IA à copier-coller | Connexion à l'API Google Business Profile pour publier les réponses directement |
 | — | Webhook vers n8n à chaque participation (CRM, Odoo, Slack, Google Sheets) |

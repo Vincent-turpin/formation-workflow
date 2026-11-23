@@ -52,7 +52,8 @@
       <button data-tab="qr">📱 QR code</button>
       <button data-tab="redeem">🎟️ Valider un gain</button>
       <button data-tab="contacts">📇 Clients</button>
-      <button data-tab="ai">🤖 Réponses IA</button>
+      <button data-tab="feedback">⭐ Avis clients <span class="badge" id="fbBadge" hidden style="margin-left:4px;padding:1px 7px"></span></button>
+      <button data-tab="ai">🤖 Avis Google &amp; IA</button>
     </nav>
     <div class="bottom" style="margin-top:30px;font-size:13px;color:var(--mute);padding-left:8px">
       <div id="me"></div>
@@ -126,6 +127,15 @@
         </div>
         <p class="muted" style="font-size:13px">« Utilisable après » oblige le client à revenir lors d'une prochaine visite (ex. 24 h).</p>
         <label class="check"><input type="checkbox" name="collectPhone"> Demander le numéro de téléphone (pour campagnes SMS)</label>
+        <h3 style="margin-top:28px">Questionnaire de satisfaction</h3>
+        <label class="check"><input type="checkbox" name="feedbackEnabled"> Demander « Comment s'est passée votre visite ? » (1 à 5 étoiles) avant la roue</label>
+        <p class="muted" style="font-size:13px;margin:6px 0 0">La note reste privée et n'a aucun effet sur le jeu : le lien d'avis Google est proposé à tous, quelle que soit la note.</p>
+        <label>Email qui reçoit les alertes (note de 4/5 ou moins)</label>
+        <input name="alertEmail" type="email" placeholder="Par défaut : l'email de votre compte">
+        <label class="check" style="margin-top:16px"><input type="checkbox" name="followupEnabled"> Envoyer automatiquement un email de suivi au client (note de 4/5 ou moins)</label>
+        <label>Message de l'email de suivi</label>
+        <textarea name="followupMessage" rows="5" maxlength="2000"></textarea>
+        <p class="muted" style="font-size:13px;margin:6px 0 0">Le client peut répondre directement : sa réponse arrive sur l'email d'alerte ci-dessus.</p>
         <p class="error" id="setErr"></p>
         <button class="btn">Enregistrer</button>
       </form>
@@ -239,7 +249,27 @@
     </section>
 
     <!-- IA -->
+    <section class="tab" id="tab-feedback">
+      <div id="fbMailWarn" class="card" hidden style="margin-bottom:20px;border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.08)">
+        ⚠️ L'envoi d'emails n'est pas encore activé sur la plateforme : les alertes et les emails de suivi ne partent pas. Les retours restent visibles ici.
+      </div>
+      <div class="grid g4" id="fbKpis"></div>
+      <div class="grid g2" style="margin-top:20px">
+        <div class="card"><h3>Répartition des notes</h3><div id="fbDist"></div></div>
+        <div class="card">
+          <h3>Comment ça marche</h3>
+          <p class="muted" style="margin:0">Avant de jouer, chaque client peut noter sa visite. Pour une note de <b>4/5 ou moins</b>, vous recevez une alerte par email et le client reçoit un message de suivi (réglages dans <a href="#" data-go="settings">Paramètres</a>).<br><br>Le lien d'avis Google reste proposé à tout le monde : c'est ce qui vous garde dans les règles de Google.</p>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="top" style="margin-bottom:10px"><h3 style="margin:0">Retours clients</h3>
+          <select id="fbFilter" style="width:auto"><option value="todo">À traiter (4/5 ou moins)</option><option value="low">Toutes les notes de 4/5 ou moins</option><option value="all">Tous les retours</option></select></div>
+        <div id="fbList"></div>
+      </div>
+    </section>
+
     <section class="tab" id="tab-ai">
+      <div class="card" id="gCard" style="margin-bottom:20px"></div>
       <div class="grid g2">
         <form class="card" id="aiForm">
           <h3>Répondre à un avis avec l'IA</h3>
@@ -284,7 +314,7 @@ $('#nav').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   document.querySelectorAll('#nav button').forEach((x) => x.classList.toggle('on', x === b));
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.id === 'tab-' + b.dataset.tab));
-  ({ overview: loadStats, wheel: loadPrizes, contacts: loadContacts, ai: loadReviews, settings: fillSettings, brand: fillBrand })[b.dataset.tab]?.();
+  ({ overview: loadStats, wheel: loadPrizes, contacts: loadContacts, ai: () => { loadReviews(); loadGoogle(); }, settings: fillSettings, brand: fillBrand, feedback: loadFeedback })[b.dataset.tab]?.();
 };
 $('#logout').onclick = async () => { await api('/api/auth/logout', { method: 'POST' }); location.href = '/'; };
 
@@ -375,6 +405,8 @@ function fillSettings() {
   const f = $('#settingsForm'), b = me.business;
   for (const k of ['googleReviewUrl', 'instagramUrl', 'tiktokUrl', 'facebookUrl', 'cooldownDays', 'couponValidityDays', 'minDelayHours']) f[k].value = b[k] ?? '';
   f.collectPhone.checked = !!b.collectPhone;
+  f.feedbackEnabled.checked = b.feedbackEnabled !== false; f.followupEnabled.checked = b.followupEnabled !== false;
+  f.alertEmail.value = b.alertEmail || ''; f.followupMessage.value = b.followupMessage || '';
   f.act_google.checked = b.actions.google; f.act_instagram.checked = b.actions.instagram; f.act_tiktok.checked = !!b.actions.tiktok; f.act_facebook.checked = !!b.actions.facebook; f.act_none.checked = b.actions.none;
 }
 $('#settingsForm').onsubmit = async (e) => {
@@ -384,6 +416,8 @@ $('#settingsForm').onsubmit = async (e) => {
     googleReviewUrl: f.googleReviewUrl.value.trim(), instagramUrl: f.instagramUrl.value.trim(), tiktokUrl: f.tiktokUrl.value.trim(), facebookUrl: f.facebookUrl.value.trim(),
     cooldownDays: f.cooldownDays.value, couponValidityDays: f.couponValidityDays.value, minDelayHours: f.minDelayHours.value,
     collectPhone: f.collectPhone.checked,
+    feedbackEnabled: f.feedbackEnabled.checked, followupEnabled: f.followupEnabled.checked,
+    alertEmail: f.alertEmail.value.trim(), followupMessage: f.followupMessage.value,
     actions: { google: f.act_google.checked, instagram: f.act_instagram.checked, tiktok: f.act_tiktok.checked, facebook: f.act_facebook.checked, none: f.act_none.checked },
   };
   if (!Object.values(body.actions).some(Boolean)) return ($('#setErr').textContent = 'Activez au moins une action.');
@@ -521,7 +555,119 @@ async function loadReviews() {
     <p class="muted">${esc(r.text)}</p><div class="reply">${esc(r.reply)}</div></details>`).join('') || '<p class="muted">Aucune réponse générée.</p>';
 }
 
-init();
+// ----- avis clients (satisfaction privée) -----
+const starStr = (n) => '<span style="color:#F59E0B;letter-spacing:1px">' + '★'.repeat(n) + '</span><span style="color:rgba(201,184,255,.25)">' + '★'.repeat(5 - n) + '</span>';
+let fb = null;
+async function loadFeedback() {
+  fb = await api('/api/feedback');
+  $('#fbMailWarn').hidden = fb.emailEnabled;
+  const kpi = (v, l) => `<div class="card kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  $('#fbKpis').innerHTML = kpi(fb.average ? fb.average.toFixed(1) + ' / 5' : '—', 'Note moyenne') + kpi(fb.count, 'Retours reçus')
+    + kpi(fb.distribution.slice(0, 4).reduce((a, b) => a + b, 0), 'Notes de 4/5 ou moins') + kpi(fb.toHandle, 'À traiter');
+  const max = Math.max(1, ...fb.distribution);
+  $('#fbDist').innerHTML = [5, 4, 3, 2, 1].map((n) => `<div style="display:flex;gap:10px;align-items:center;margin:8px 0;font-size:14px">
+    <span style="width:70px">${starStr(n)}</span><div class="bar" style="flex:1"><i style="width:${(fb.distribution[n - 1] / max) * 100}%"></i></div><b style="width:28px;text-align:right">${fb.distribution[n - 1]}</b></div>`).join('');
+  updateFbBadge(); renderFeedback();
+}
+function updateFbBadge() { const n = fb?.toHandle || 0; $('#fbBadge').hidden = !n; $('#fbBadge').textContent = n; }
+function renderFeedback() {
+  const f = $('#fbFilter').value;
+  const items = fb.items.filter((x) => f === 'all' || (x.rating <= 4 && (f === 'low' || !x.handled)));
+  const dt = (s) => new Date(s).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' });
+  $('#fbList').innerHTML = items.map((x) => `<div style="padding:14px 0;border-bottom:1px solid var(--line);display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;${x.handled ? 'opacity:.55' : ''}">
+    <div style="flex:1;min-width:240px">
+      <div>${starStr(x.rating)} <span class="muted" style="font-size:13px;margin-left:6px">${dt(x.createdAt)}</span></div>
+      <p style="margin:6px 0">${x.feedback ? esc(x.feedback) : '<span class="muted">Aucun commentaire</span>'}</p>
+      <span class="muted" style="font-size:13px"><b style="color:var(--star)">${esc(x.firstName)}</b> · <a href="mailto:${esc(x.email)}">${esc(x.email)}</a>${x.phone ? ` · ${esc(x.phone)}` : ''}</span>
+      ${x.rating <= 4 ? `<div style="margin-top:6px;font-size:12px">${x.followupSentAt ? '<span class="badge ok">Email de suivi envoyé</span>' : '<span class="badge grey">Pas d\'email de suivi</span>'}</div>` : ''}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <a class="btn ghost small" href="mailto:${esc(x.email)}?subject=${encodeURIComponent('Suite à votre visite chez ' + me.business.name)}">Répondre</a>
+      ${x.rating <= 4 ? `<label class="check" style="margin:0"><input type="checkbox" data-handled="${x.id}" ${x.handled ? 'checked' : ''}> Traité</label>` : ''}
+    </div></div>`).join('') || '<p class="muted">Rien à afficher pour ce filtre. 🎉</p>';
+}
+$('#fbFilter').onchange = renderFeedback;
+$('#fbList').onchange = async (e) => {
+  const id = e.target.dataset.handled; if (!id) return;
+  await api(`/api/feedback/${id}`, { method: 'PUT', body: { handled: e.target.checked } });
+  const it = fb.items.find((x) => x.id === id); it.handled = e.target.checked;
+  fb.toHandle = fb.items.filter((x) => x.rating <= 4 && !x.handled).length;
+  loadFeedback();
+};
+document.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (g && g.closest('#tab-feedback')) { e.preventDefault(); document.querySelector(`#nav [data-tab=${g.dataset.go}]`).click(); } });
+
+// ----- avis Google (Google Business Profile) -----
+let gStatus = null, gReviews = [];
+async function loadGoogle() {
+  const card = $('#gCard');
+  gStatus = await api('/api/google/status');
+  if (!gStatus.configured) {
+    card.innerHTML = `<h3>Vos avis Google</h3><p class="muted" style="margin:0">La connexion directe à votre fiche Google n'est pas encore activée sur la plateforme. En attendant, copiez un avis dans le formulaire ci-dessous pour générer une réponse. <a href="mailto:contact@qlick.fr">Demander l'activation à Qlick</a></p>`;
+    return;
+  }
+  if (!gStatus.connected) {
+    card.innerHTML = `<h3>Vos avis Google</h3><p class="muted">Connectez votre fiche Google pour voir vos avis ici et y répondre en un clic, avec l'aide de l'IA.</p><a class="btn" href="/api/google/connect">Connecter ma fiche Google</a>`;
+    return;
+  }
+  if (!gStatus.location) {
+    card.innerHTML = `<h3>Choisissez votre fiche Google</h3>${gStatus.locations.length ? `<select id="gLoc">${gStatus.locations.map((l) => `<option value="${esc(l.path)}">${esc(l.title)}</option>`).join('')}</select><button class="btn small" id="gLocOk" style="margin-top:12px">Utiliser cette fiche</button>` : '<p class="muted">Aucune fiche trouvée sur ce compte Google.</p>'}
+      <p><a href="#" id="gOff" class="muted" style="font-size:13px">Déconnecter</a></p>`;
+    if ($('#gLocOk')) $('#gLocOk').onclick = async () => { await api('/api/google/location', { method: 'POST', body: { path: $('#gLoc').value } }); loadGoogle(); };
+    $('#gOff').onclick = gDisconnect;
+    return;
+  }
+  card.innerHTML = `<div class="top" style="margin-bottom:6px"><h3 style="margin:0">Vos avis Google — ${esc(gStatus.location.title)}</h3>
+    <div style="display:flex;gap:8px"><select id="gFilter" style="width:auto"><option value="todo">Sans réponse</option><option value="all">Tous</option></select><a href="#" id="gOff" class="btn ghost small">Déconnecter</a></div></div>
+    <div id="gList" class="muted">Chargement des avis…</div>`;
+  $('#gOff').onclick = gDisconnect;
+  $('#gFilter').onchange = renderGoogle;
+  try { const r = await api('/api/google/reviews'); gReviews = r.reviews; renderGoogle(); }
+  catch (e) { $('#gList').innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+}
+function renderGoogle() {
+  const list = gReviews.filter((r) => $('#gFilter').value === 'all' || !r.reply);
+  $('#gList').innerHTML = list.map((r) => `<div style="padding:16px 0;border-bottom:1px solid var(--line)" data-rid="${esc(r.id)}">
+    <div>${r.rating ? starStr(r.rating) : ''} <b style="color:var(--star);margin-left:6px">${esc(r.author)}</b> <span class="muted" style="font-size:13px">${new Date(r.createdAt).toLocaleDateString('fr-FR')}</span></div>
+    <p style="margin:6px 0;color:var(--star)">${r.comment ? esc(r.comment) : '<span class="muted">Note sans commentaire</span>'}</p>
+    ${r.reply ? `<div class="reply" style="font-size:14px"><b>Votre réponse :</b> ${esc(r.reply)}</div>` : ''}
+    <textarea rows="3" placeholder="Votre réponse publique…" style="margin-top:8px">${r.reply ? esc(r.reply) : ''}</textarea>
+    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+      <button class="btn ghost small" data-suggest>✨ Suggérer avec l'IA</button>
+      <button class="btn small" data-publish>${r.reply ? 'Modifier la réponse sur Google' : 'Publier sur Google'}</button>
+    </div></div>`).join('') || '<p class="muted">Tous vos avis ont une réponse. 👏</p>';
+}
+$('#gCard').onclick = async (e) => {
+  const box = e.target.closest('[data-rid]'); if (!box) return;
+  const r = gReviews.find((x) => x.id === box.dataset.rid), ta = box.querySelector('textarea');
+  if (e.target.matches('[data-suggest]')) {
+    e.target.disabled = true; e.target.textContent = 'Génération…';
+    try { ta.value = (await api(`/api/google/reviews/${r.id}/suggest`, { method: 'POST', body: { author: r.author, rating: r.rating, comment: r.comment } })).reply; }
+    catch (err) { toast(err.message); }
+    e.target.disabled = false; e.target.textContent = '✨ Suggérer avec l\'IA';
+  }
+  if (e.target.matches('[data-publish]')) {
+    if (!ta.value.trim()) return toast('Écrivez une réponse');
+    if (!confirm('Publier cette réponse publiquement sur Google ?')) return;
+    e.target.disabled = true;
+    try { await api(`/api/google/reviews/${r.id}/reply`, { method: 'POST', body: { comment: ta.value.trim() } }); r.reply = ta.value.trim(); toast('Réponse publiée sur Google ✅'); renderGoogle(); }
+    catch (err) { toast(err.message); e.target.disabled = false; }
+  }
+};
+async function gDisconnect(e) {
+  e.preventDefault();
+  if (!confirm('Déconnecter votre fiche Google de Qlick Boost ?')) return;
+  await api('/api/google/disconnect', { method: 'POST' }); loadGoogle();
+}
+
+init().then(() => {
+  api('/api/feedback').then((r) => { fb = r; updateFbBadge(); }).catch(() => {});
+  const q = new URLSearchParams(location.search);
+  if (q.has('google')) {
+    document.querySelector('#nav [data-tab=ai]').click();
+    toast({ ok: 'Fiche Google connectée ✅', annule: 'Connexion Google annulée' }[q.get('google')] || `Connexion Google impossible${q.get('msg') ? ' : ' + q.get('msg') : ''}`);
+    history.replaceState(null, '', '/dashboard');
+  }
+});
 </script>
 </body>
 </html>

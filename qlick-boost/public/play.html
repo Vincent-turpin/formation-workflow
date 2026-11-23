@@ -17,6 +17,11 @@
     .action:hover, .action.suggested { border-color: var(--brand); }
     .action.suggested { box-shadow: 0 10px 30px -14px var(--brand); }
     .action .ic { font-size: 30px; }
+    .stars { display: flex; justify-content: center; gap: 6px; margin: 14px 0; }
+    .stars button { font-size: 40px; line-height: 1; background: none; border: 0; cursor: pointer; color: #E6E0F7; padding: 0 2px; transition: transform .12s, color .12s; }
+    .stars button.on { color: #F59E0B; }
+    .stars button:active { transform: scale(.9); }
+    #s-rate textarea { resize: vertical; }
     .action b { display: block; }
     canvas { width: min(88vw, 380px); height: min(88vw, 380px); }
     .result { padding: 28px 20px; border-radius: 20px; background: #fff; border: 1px solid var(--line); }
@@ -32,11 +37,28 @@
 <main>
   <div id="loading" class="muted">Chargement…</div>
 
-  <!-- Étape 1 : choix de l'action -->
-  <section class="step" id="s-action">
+  <header id="hdr" hidden>
     <img id="logo" alt="" hidden style="max-width:140px;max-height:90px;object-fit:contain;margin:0 auto 14px">
     <h1 id="title">Tentez votre chance !</h1>
     <p class="muted" id="welcome"></p>
+  </header>
+
+  <!-- Étape 0 : satisfaction (privée, envoyée au commerçant) -->
+  <section class="step" id="s-rate">
+    <div class="card" style="margin-top:18px">
+      <p style="font-weight:700;margin:0">Comment s'est passée votre visite ?</p>
+      <div class="stars" id="stars" role="radiogroup" aria-label="Note de 1 à 5">
+        <button type="button" data-n="1" aria-label="1 étoile">★</button><button type="button" data-n="2" aria-label="2 étoiles">★</button><button type="button" data-n="3" aria-label="3 étoiles">★</button><button type="button" data-n="4" aria-label="4 étoiles">★</button><button type="button" data-n="5" aria-label="5 étoiles">★</button>
+      </div>
+      <textarea id="feedback" rows="3" maxlength="1000" placeholder="Un commentaire pour l'équipe ? (facultatif)"></textarea>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Votre réponse est envoyée uniquement à l'établissement. Elle n'a aucun effet sur le jeu.</p>
+      <button class="btn" id="btn-rate" style="width:100%;margin-top:14px" disabled>Continuer</button>
+    </div>
+    <p><a href="#" id="skip-rate" class="muted" style="font-size:14px">Passer cette étape</a></p>
+  </section>
+
+  <!-- Étape 1 : choix de l'action -->
+  <section class="step" id="s-action">
     <p style="font-weight:700;margin-top:24px">Pour jouer, choisissez une action :</p>
     <button class="action" data-action="google" hidden><span class="ic">⭐</span><span><b>Laisser un avis Google</b><small class="muted">Votre avis sincère, quelle que soit la note</small></span></button>
     <button class="action" data-action="instagram" hidden><span class="ic">📸</span><span><b>Suivre notre Instagram</b><small class="muted">Restez informé de nos nouveautés</small></span></button>
@@ -63,8 +85,9 @@
       <label for="email">Email</label>
       <input id="email" name="email" type="email" required autocomplete="email">
       <div id="phoneWrap" hidden><label for="phone">Téléphone (optionnel)</label><input id="phone" name="phone" type="tel" autocomplete="tel"></div>
-      <label class="check"><input type="checkbox" name="consent" required> J'accepte le <a id="rulesLink" target="_blank">règlement du jeu</a>. Une seule participation par personne sur la période définie par l'établissement.</label>
-      <label class="check"><input type="checkbox" name="marketingOptIn"> J'accepte de recevoir les offres de l'établissement (désinscription possible à tout moment).</label>
+      <label class="check"><input type="checkbox" name="consent" required> <span>J'accepte le <a id="rulesLink" target="_blank">règlement du jeu</a>. Une seule participation par personne sur la période définie par l'établissement.</span></label>
+      <p class="muted" id="followNote" hidden style="font-size:13px;margin:12px 0 0"></p>
+      <label class="check"><input type="checkbox" name="marketingOptIn"> <span>J'accepte de recevoir les offres de l'établissement (désinscription possible à tout moment).</span></label>
       <p class="error" id="form-err"></p>
       <button class="btn" style="width:100%">Accéder à la roue 🎡</button>
     </form>
@@ -90,9 +113,10 @@
 <script>
 const slug = location.pathname.split('/').pop();
 const src = new URLSearchParams(location.search).get('src') || 'direct';
-let cfg, wheel, chosenAction, player;
+let cfg, wheel, chosenAction, player, rating = null, feedbackText = '';
 
-const show = (id) => { document.querySelectorAll('.step').forEach((s) => s.classList.toggle('active', s.id === id)); window.scrollTo(0, 0); };
+const show = (id) => {
+  document.getElementById('hdr').hidden = !['s-rate', 's-action'].includes(id); document.querySelectorAll('.step').forEach((s) => s.classList.toggle('active', s.id === id)); window.scrollTo(0, 0); };
 
 async function init() {
   const res = await fetch(`/api/public/${slug}`);
@@ -123,12 +147,22 @@ async function init() {
     document.querySelector('#s-action p[style]').textContent = 'Le jeu est en cours de configuration. Revenez très bientôt !';
   }
   wheel = new Wheel(document.getElementById('wheel'), cfg.segments);
-  show('s-action');
+  show(cfg.feedbackEnabled ? 's-rate' : 's-action');
 }
+
+// satisfaction : la suite du parcours est strictement la même quelle que soit la note
+document.getElementById('stars').onclick = (e) => {
+  const n = Number(e.target.dataset.n); if (!n) return;
+  rating = n;
+  document.querySelectorAll('#stars button').forEach((b) => b.classList.toggle('on', Number(b.dataset.n) <= n));
+  document.getElementById('btn-rate').disabled = false;
+};
+document.getElementById('btn-rate').onclick = () => { feedbackText = document.getElementById('feedback').value.trim(); show('s-action'); };
+document.getElementById('skip-rate').onclick = (e) => { e.preventDefault(); rating = null; feedbackText = ''; show('s-action'); };
 
 function choose(action) {
   chosenAction = action;
-  if (action === 'none') return show('s-form');
+  if (action === 'none') return toForm();
   const url = cfg.actionUrls[action];
   document.getElementById('back-text').textContent = {
     google: 'Une fois votre avis publié sur Google, revenez ici pour tourner la roue.',
@@ -143,12 +177,18 @@ function choose(action) {
   btn.disabled = true; setTimeout(() => (btn.disabled = false), 4000);
   show('s-back');
 }
-document.getElementById('btn-done').onclick = () => show('s-form');
+function toForm() {
+  const note = document.getElementById('followNote');
+  note.hidden = !(cfg.followupEnabled && rating && rating <= 4);
+  note.textContent = `Merci pour votre retour. ${cfg.name} pourra vous écrire à cette adresse pour mieux comprendre votre note.`;
+  show('s-form');
+}
+document.getElementById('btn-done').onclick = toForm;
 
 document.getElementById('form').onsubmit = (e) => {
   e.preventDefault();
   const f = new FormData(e.target);
-  player = { firstName: f.get('firstName'), email: f.get('email'), phone: f.get('phone'), consent: !!f.get('consent'), marketingOptIn: !!f.get('marketingOptIn') };
+  player = { rating, feedback: feedbackText, firstName: f.get('firstName'), email: f.get('email'), phone: f.get('phone'), consent: !!f.get('consent'), marketingOptIn: !!f.get('marketingOptIn') };
   show('s-wheel');
   wheel.idle();
 };
