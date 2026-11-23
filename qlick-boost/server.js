@@ -38,7 +38,7 @@ app.use((req, res, next) => {
 });
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 const SIGNUP_CODE = process.env.QLICK_SIGNUP_CODE || '';
-app.get('/api/config', (req, res) => res.json({ demo: DEMO, inviteRequired: !!SIGNUP_CODE }));
+app.get('/api/config', (req, res) => res.json({ demo: DEMO && !process.env.QLICK_DEMO_PASSWORD, inviteRequired: !!SIGNUP_CODE }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public'), { extensions: ['html'] }));
 
@@ -121,7 +121,11 @@ function ensureAdmin() {
     u = { id: uid(), email, password: hashPassword(password), createdAt: now(), role: 'admin' };
     data.users.push(u);
     console.log(`Administrateur Qlick créé : ${email}`);
-  } else if (u.role !== 'admin') u.role = 'admin';
+  } else {
+    if (u.role !== 'admin') u.role = 'admin';
+    // le mot de passe défini dans la configuration fait foi (utile pour le réinitialiser)
+    if (!verifyPassword(password, u.password)) { u.password = hashPassword(password); console.log(`Mot de passe administrateur mis à jour : ${email}`); }
+  }
   db.save();
 }
 
